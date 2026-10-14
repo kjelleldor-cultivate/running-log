@@ -105,6 +105,17 @@ td a:hover { text-decoration: underline; }
 .tablewrap th { position: sticky; top: 0; background: var(--surface); }
 .err { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
 .theme { display:inline-flex; align-items:center; background: var(--surface); color: var(--text-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 14px; }
+.lock { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; font-size: 13.5px; }
+.lock .msg { color: var(--text-2); flex: 1 1 220px; }
+.lock input[type=password] { font: inherit; font-size: 13.5px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); width: 200px; max-width: 100%; }
+.lock label { color: var(--text-2); font-size: 12.5px; display: inline-flex; gap: 6px; align-items: center; }
+.btn.ghost { background: transparent; color: var(--text-2); border: 1px solid var(--border); font-weight: 500; }
+.sect { grid-column: span 12; display: flex; align-items: baseline; gap: 10px; margin: 10px 0 -2px; }
+.sect h3 { margin: 0; font-size: 17px; letter-spacing: -0.01em; }
+.sect span { font-size: 12.5px; color: var(--muted); }
+.wgrid { grid-column: span 12; display: grid; gap: 14px; grid-template-columns: repeat(12, 1fr); }
+.wgrid[hidden], .lock[hidden] { display: none; }
+.status { display: inline-block; font-size: 11.5px; padding: 1px 7px; border-radius: 5px; border: 1px solid var(--border); color: var(--text-2); margin-left: 4px; vertical-align: 2px; }
 footer { margin-top: 24px; font-size: 12.5px; color: var(--muted); }
 </style>
 </head>
@@ -135,8 +146,41 @@ footer { margin-top: 24px; font-size: 12.5px; color: var(--muted); }
     <span class="note">Pace stats leave out treadmill runs (no GPS) and runs the watch got wrong.</span>
   </div>
 
+  <div class="lock" id="lock" hidden>
+    <span class="msg" id="lockMsg">🔒 Recovery data from Garmin is locked.</span>
+    <form id="lockForm" style="display:contents">
+      <input type="password" id="pw" placeholder="Password" autocomplete="current-password" aria-label="Dashboard password">
+      <label><input type="checkbox" id="remember"> Remember on this device</label>
+      <button class="btn" type="submit">Unlock</button>
+    </form>
+    <button class="btn ghost" id="relock" type="button" hidden>Lock</button>
+  </div>
+
   <div class="grid" id="app">
     <div class="kpis" id="kpis"></div>
+
+    <div class="wgrid" id="well" hidden>
+      <div class="sect"><h3>Recovery</h3><span id="wellSub">From Garmin</span></div>
+      <div class="kpis" id="wkpis"></div>
+      <div class="card span-12">
+        <h2>Heart rate variability (overnight)</h2>
+        <p class="cap">Higher is generally better. The shaded band is your personal baseline range from Garmin.</p>
+        <div class="legend"><span><i style="background:var(--s1)"></i>Nightly average</span><span><i class="line" style="background:var(--s2)"></i>7-day average</span><span><i style="background:var(--s1-soft);border-radius:2px"></i>Baseline range</span></div>
+        <div id="hrv"></div>
+      </div>
+      <div class="card span-6">
+        <h2>Resting heart rate</h2>
+        <p class="cap">Lower usually means better recovery and fitness. A sudden rise can mean fatigue or illness.</p>
+        <div id="rhr"></div>
+      </div>
+      <div class="card span-6">
+        <h2>Sleep</h2>
+        <p class="cap">Hours asleep per night. Hover for sleep score and deep/REM time.</p>
+        <div id="sleep"></div>
+      </div>
+    </div>
+
+    <div class="sect"><h3>Running</h3><span>From Strava</span></div>
 
     <div class="card span-12">
       <h2 id="volTitle">Weekly distance</h2>
@@ -178,13 +222,15 @@ footer { margin-top: 24px; font-size: 12.5px; color: var(--muted); }
     </div>
   </div>
 
-  <footer>Data from <a id="stravaLink" href="https://www.strava.com/athletes/10252695" style="color:inherit">Strava</a>. Refresh re-reads the latest saved data; new runs are pulled from Strava once a day.</footer>
+  <footer>Data from <a id="stravaLink" href="https://www.strava.com/athletes/10252695" style="color:inherit">Strava</a>. Recovery data from Garmin, encrypted. Refresh re-reads the latest saved data; Strava and Garmin sync once a day.</footer>
 </div>
 <div id="tip"></div>
 
 <script>
 const DATA_URL = 'data/runs.json';
 let DB = null, RANGE = '365';
+const GARMIN_URL = 'data/garmin.enc.json';
+let GENV = null, GDATA = null, PW = null;
 
 // ---------- helpers ----------
 const $ = (s) => document.querySelector(s);
@@ -207,6 +253,45 @@ function showTip(html, ev) {
   tip.style.left = x + 'px'; tip.style.top = y + 'px';
 }
 const hideTip = () => { tip.style.opacity = 0; };
+
+// ---------- garmin (encrypted) ----------
+const b64d = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+async function decryptEnv(env, pw) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: b64d(env.salt), iterations: env.iter, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64d(env.iv) }, key, b64d(env.ct));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+async function loadGarmin() {
+  try {
+    const res = await fetch(GARMIN_URL + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) throw new Error('missing');
+    GENV = await res.json();
+  } catch (e) { GENV = null; }
+  $('#lock').hidden = !GENV;
+  if (!GENV) return;
+  if (!PW) { try { PW = localStorage.getItem('dashpw'); } catch (e) {} }
+  if (PW) await unlock(PW, false);
+  else lockedUI();
+}
+function lockedUI(msg) {
+  GDATA = null; $('#well').hidden = true; $('#lockForm').style.display = 'contents'; $('#relock').hidden = true;
+  $('#lockMsg').textContent = msg || '🔒 Recovery data from Garmin is locked.';
+}
+async function unlock(pw, remember) {
+  try {
+    const d = await decryptEnv(GENV, pw);
+    PW = pw; GDATA = d;
+    if (remember) { try { localStorage.setItem('dashpw', pw); } catch (e) {} }
+    $('#lockForm').style.display = 'none'; $('#relock').hidden = false;
+    $('#lockMsg').textContent = '🔓 Recovery data unlocked.';
+    $('#well').hidden = false;
+    if (DB) renderWell();
+  } catch (e) {
+    PW = null; try { localStorage.removeItem('dashpw'); } catch (x) {}
+    lockedUI('Wrong password. Try again.');
+  }
+}
 
 // ---------- data ----------
 function normalise(raw) {
@@ -231,6 +316,7 @@ async function load(manual) {
     const before = DB ? DB.runs.length : null;
     DB = normalise(await res.json());
     render();
+    await loadGarmin();
     if (manual) {
       const diff = before == null ? 0 : DB.runs.length - before;
       $('#toast').textContent = diff > 0 ? `${diff} new run${diff > 1 ? 's' : ''} loaded` : 'Up to date';
@@ -271,6 +357,103 @@ function render() {
   renderYears(all);
   renderShoes(all);
   renderLog();
+  if (GDATA) renderWell();
+}
+
+// ---------- wellness ----------
+const wDays = () => {
+  const from = rangeStart(DB.runs);
+  return GDATA.days.map((d) => ({ ...d, dt: new Date(d.date + 'T00:00:00') })).filter((d) => RANGE === 'all' || d.dt >= from);
+};
+const lastVal = (rows, k) => { for (let i = rows.length - 1; i >= 0; i--) if (rows[i][k] != null) return rows[i]; return null; };
+const avg = (rows, k) => d3.mean(rows.filter((r) => r[k] != null), (r) => r[k]);
+const statusText = (s) => s ? s.toLowerCase().replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()) : '';
+
+function renderWell() {
+  const all = GDATA.days.map((d) => ({ ...d, dt: new Date(d.date + 'T00:00:00') }));
+  const rows = wDays();
+  $('#wellSub').textContent = `From Garmin · ${GDATA.days.length} days · updated ${new Date(GDATA.updated).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`;
+  const last7 = all.slice(-7), prev = all.slice(-37, -7);
+  const h = lastVal(all, 'hrv'), r = lastVal(all, 'rhr'), sl = lastVal(all, 'sleep_h'), bb = lastVal(all, 'bb_high'), v = lastVal(all, 'vo2'), rd = lastVal(all, 'readiness');
+  const delta = (k, unit, dp = 0) => { const a = avg(last7, k), b = avg(prev, k); return a != null && b != null ? `7-day avg ${a.toFixed(dp)}${unit} (${a >= b ? '+' : '−'}${Math.abs(a - b).toFixed(dp)} vs prior 30)` : ''; };
+  const hm = (x) => `${Math.floor(x)}h ${String(Math.round((x % 1) * 60)).padStart(2, '0')}m`;
+  const tiles = [
+    ['HRV last night', h ? h.hrv : '–', 'ms', h ? (h.hrv_status ? `<span class="status">${statusText(h.hrv_status)}</span> ` : '') + (h.hrv_low ? `baseline ${h.hrv_low}–${h.hrv_high}` : '') : ''],
+    ['Resting heart rate', r ? r.rhr : '–', 'bpm', delta('rhr', ' bpm')],
+    ['Sleep last night', sl ? hm(sl.sleep_h) : '–', '', sl && sl.sleep_score ? `score ${sl.sleep_score}` : ''],
+    ['Body Battery peak', bb ? bb.bb_high : '–', '', bb && bb.bb_low != null ? `low of ${bb.bb_low}` : ''],
+    ['VO2 max', v ? (+v.vo2).toFixed(v.vo2 % 1 ? 1 : 0) : '–', '', v ? 'as of ' + fmtDate(v.dt) : ''],
+    ['Training readiness', rd ? rd.readiness : '–', rd ? '/100' : '', rd ? fmtDate(rd.dt) : ''],
+  ];
+  $('#wkpis').innerHTML = tiles.map(([l, val, u, d]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${val}${u ? `<small>${u}</small>` : ''}</div><div class="d">${d}</div></div>`).join('');
+  renderHrv(rows); renderRhr(rows); renderSleep(rows);
+}
+
+function timeChart(sel, rows, keys, h, yfmt) {
+  const { svg, w } = chartBox(sel, h);
+  const m = { t: 10, r: 14, b: 26, l: 54 };
+  const pts = rows.filter((d) => keys.some((k) => d[k] != null));
+  if (pts.length < 2) { svg.append('text').attr('x', w / 2).attr('y', h / 2).attr('text-anchor', 'middle').text('No data in this period'); return null; }
+  const x = d3.scaleTime().domain(d3.extent(pts, (d) => d.dt)).range([m.l, w - m.r]);
+  const vals = pts.flatMap((d) => keys.map((k) => d[k]).filter((v) => v != null));
+  const ext = d3.extent(vals), pad = (ext[1] - ext[0]) * 0.12 || 2;
+  const y = d3.scaleLinear().domain([ext[0] - pad, ext[1] + pad]).nice().range([h - m.b, m.t]);
+  svg.append('g').attr('class', 'gridline').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickSize(-(w - m.l - m.r)).tickFormat(yfmt || ((v) => v)));
+  svg.selectAll('.gridline text').attr('x', -6);
+  svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${h - m.b})`).call(d3.axisBottom(x).ticks(Math.max(2, Math.floor(w / 90))).tickSize(0).tickPadding(8));
+  return { svg, x, y, m, w, h, pts };
+}
+function hoverLayer(c, key, html) {
+  const { svg, x, y, m, w, h, pts } = c;
+  const hp = pts.filter((d) => d[key] != null);
+  const rule = svg.append('line').attr('y1', m.t).attr('y2', h - m.b).attr('stroke', 'var(--muted)').attr('stroke-dasharray', '3 3').style('opacity', 0);
+  const dot = svg.append('circle').attr('r', 5).attr('fill', 'var(--s1)').attr('stroke', 'var(--surface)').attr('stroke-width', 2).style('opacity', 0);
+  const bis = d3.bisector((d) => d.dt).center;
+  svg.append('rect').attr('x', m.l).attr('y', m.t).attr('width', w - m.l - m.r).attr('height', h - m.t - m.b).attr('fill', 'transparent')
+    .on('mousemove', (ev) => { const d = hp[bis(hp, x.invert(d3.pointer(ev)[0]))]; if (!d) return; rule.attr('x1', x(d.dt)).attr('x2', x(d.dt)).style('opacity', 1); dot.attr('cx', x(d.dt)).attr('cy', y(d[key])).style('opacity', 1); showTip(html(d), ev); })
+    .on('mouseleave', () => { rule.style('opacity', 0); dot.style('opacity', 0); hideTip(); });
+}
+
+function renderHrv(rows) {
+  const c = timeChart('#hrv', rows, ['hrv', 'hrv_week', 'hrv_low', 'hrv_high'], 240, (v) => v + ' ms');
+  if (!c) return;
+  const { svg, x, y, pts } = c;
+  const band = pts.filter((d) => d.hrv_low != null && d.hrv_high != null);
+  svg.insert('path', '.axis').datum(band).attr('fill', 'var(--s1-soft)').attr('fill-opacity', 0.35)
+    .attr('d', d3.area().x((d) => x(d.dt)).y0((d) => y(d.hrv_low)).y1((d) => y(d.hrv_high)).curve(d3.curveStepAfter));
+  const daily = pts.filter((d) => d.hrv != null);
+  svg.append('path').datum(daily).attr('fill', 'none').attr('stroke', 'var(--s1)').attr('stroke-opacity', 0.45).attr('stroke-width', 1.5).attr('d', d3.line().x((d) => x(d.dt)).y((d) => y(d.hrv)));
+  if (daily.length <= 120) svg.append('g').selectAll('circle').data(daily).join('circle').attr('cx', (d) => x(d.dt)).attr('cy', (d) => y(d.hrv)).attr('r', 3).attr('fill', 'var(--s1)');
+  svg.append('path').datum(pts.filter((d) => d.hrv_week != null)).attr('fill', 'none').attr('stroke', 'var(--s2)').attr('stroke-width', 2).attr('d', d3.line().x((d) => x(d.dt)).y((d) => y(d.hrv_week)).curve(d3.curveMonotoneX));
+  hoverLayer(c, 'hrv', (d) => `<b>${fmtDate(d.dt)}</b><br>HRV ${d.hrv} ms${d.hrv_week ? ` · 7-day ${d.hrv_week}` : ''}${d.hrv_status ? `<br>${statusText(d.hrv_status)}` : ''}${d.hrv_low ? `<br>Baseline ${d.hrv_low}–${d.hrv_high}` : ''}`);
+}
+
+function renderRhr(rows) {
+  const c = timeChart('#rhr', rows, ['rhr'], 200, (v) => v + ' bpm');
+  if (!c) return;
+  const { svg, x, y, pts } = c;
+  svg.append('path').datum(pts.filter((d) => d.rhr != null)).attr('fill', 'none').attr('stroke', 'var(--s1)').attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('d', d3.line().x((d) => x(d.dt)).y((d) => y(d.rhr)));
+  hoverLayer(c, 'rhr', (d) => `<b>${fmtDate(d.dt)}</b><br>Resting HR ${d.rhr} bpm${d.stress != null ? `<br>Avg stress ${d.stress}` : ''}${d.steps != null ? `<br>${d.steps.toLocaleString('en-GB')} steps` : ''}`);
+}
+
+function renderSleep(rows) {
+  const data = rows.filter((d) => d.sleep_h != null);
+  const { svg, w, h } = chartBox('#sleep', 200);
+  if (data.length < 2) { svg.append('text').attr('x', w / 2).attr('y', h / 2).attr('text-anchor', 'middle').text('No data in this period'); return; }
+  const m = { t: 10, r: 8, b: 26, l: 40 };
+  const x = d3.scaleBand().domain(data.map((d) => d.date)).range([m.l, w - m.r]).paddingInner(data.length > 60 ? 0.1 : 0.25);
+  const y = d3.scaleLinear().domain([0, Math.max(9, d3.max(data, (d) => d.sleep_h))]).nice().range([h - m.b, m.t]);
+  svg.append('g').attr('class', 'gridline').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickSize(-(w - m.l - m.r)).tickFormat((v) => v + 'h'));
+  svg.selectAll('.gridline text').attr('x', -6);
+  const every = Math.ceil(data.length / (w / 70));
+  svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${h - m.b})`).call(d3.axisBottom(x).tickValues(x.domain().filter((_, i) => i % every === 0)).tickFormat((v) => d3.timeFormat('%-d %b')(new Date(v + 'T00:00:00'))).tickSize(0).tickPadding(8));
+  const bw = x.bandwidth(), rad = Math.min(3, bw / 2);
+  svg.append('g').selectAll('path').data(data).join('path').attr('fill', 'var(--s1)')
+    .attr('d', (d) => { const x0 = x(d.date), y0 = y(d.sleep_h), y1 = y(0), rr = Math.min(rad, y1 - y0); return `M${x0},${y1}V${y0 + rr}Q${x0},${y0} ${x0 + rr},${y0}H${x0 + bw - rr}Q${x0 + bw},${y0} ${x0 + bw},${y0 + rr}V${y1}Z`; });
+  const hm = (x) => `${Math.floor(x)}h ${String(Math.round((x % 1) * 60)).padStart(2, '0')}m`;
+  svg.append('g').selectAll('rect').data(data).join('rect').attr('x', (d) => x(d.date) - (x.step() - bw) / 2).attr('width', x.step()).attr('y', m.t).attr('height', h - m.t - m.b).attr('fill', 'transparent')
+    .on('mousemove', (ev, d) => showTip(`<b>Night of ${fmtDate(new Date(d.dt.getTime() - 864e5))}</b><br>${hm(d.sleep_h)} asleep${d.sleep_score ? ` · score ${d.sleep_score}` : ''}${d.deep_h != null ? `<br>Deep ${hm(d.deep_h)} · REM ${hm(d.rem_h || 0)}` : ''}`, ev))
+    .on('mouseleave', hideTip);
 }
 
 function stats(runs) {
@@ -417,6 +600,8 @@ document.querySelectorAll('#range button').forEach((b) => b.addEventListener('cl
   RANGE = b.dataset.r; render();
 }));
 $('#refresh').addEventListener('click', () => load(true));
+$('#lockForm').addEventListener('submit', (e) => { e.preventDefault(); const pw = $('#pw').value; $('#pw').value = ''; if (pw) unlock(pw, $('#remember').checked); });
+$('#relock').addEventListener('click', () => { PW = null; try { localStorage.removeItem('dashpw'); } catch (e) {} lockedUI(); });
 $('#q').addEventListener('input', renderLog);
 $('#theme').addEventListener('click', () => {
   const root = document.documentElement;
