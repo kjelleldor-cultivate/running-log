@@ -165,7 +165,7 @@ footer { margin-top: 24px; font-size: 12.5px; color: var(--muted); }
       <div class="card span-12">
         <h2>Heart rate variability (overnight)</h2>
         <p class="cap">Higher is generally better. The shaded band is your personal baseline range from Garmin.</p>
-        <div class="legend"><span><i style="background:var(--s1)"></i>Nightly average</span><span><i class="line" style="background:var(--s2)"></i>7-day average</span><span><i style="background:var(--s1-soft);border-radius:2px"></i>Baseline range</span></div>
+        <div class="legend"><span><i style="background:var(--s1)"></i>Nightly average</span><span><i class="line" style="background:var(--s2)"></i>7-day average</span><span><i style="background:var(--s1-soft);border-radius:2px"></i>Baseline range</span><span><i style="background:var(--s3)"></i>Run that day (bigger = harder)</span></div>
         <div id="hrv"></div>
       </div>
       <div class="card span-6">
@@ -177,6 +177,17 @@ footer { margin-top: 24px; font-size: 12.5px; color: var(--muted); }
         <h2>Sleep</h2>
         <p class="cap">Hours asleep per night. Hover for sleep score and deep/REM time.</p>
         <div id="sleep"></div>
+      </div>
+      <div class="card span-5">
+        <h2>Recovery after runs</h2>
+        <p class="cap">Next night's HRV and next morning's resting heart rate, grouped by how hard the day before was (Strava relative effort).</p>
+        <div id="after"></div>
+      </div>
+      <div class="card span-7">
+        <h2>Training load and HRV, week by week</h2>
+        <p class="cap">Top: total Strava relative effort per week. Bottom: average overnight HRV that week. Same timeline, so read straight down.</p>
+        <div id="loadA"></div>
+        <div id="loadB"></div>
       </div>
     </div>
 
@@ -387,6 +398,102 @@ function renderWell() {
   ];
   $('#wkpis').innerHTML = tiles.map(([l, val, u, d]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${val}${u ? `<small>${u}</small>` : ''}</div><div class="d">${d}</div></div>`).join('');
   renderHrv(rows); renderRhr(rows); renderSleep(rows);
+  renderAfter(rows); renderLoad(rows);
+}
+
+// ---------- linking Strava and Garmin ----------
+const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function runDays() {
+  const m = new Map();
+  for (const r of DB.runs) {
+    if (r.flag === 'walk') continue;
+    const k = r.start.slice(0, 10);
+    const o = m.get(k) || { effort: 0, dist: 0, n: 0, names: [] };
+    o.effort += r.effort || 0; o.dist += r.dist_m; o.n++; o.names.push(r.name);
+    m.set(k, o);
+  }
+  return m;
+}
+const dayBefore = (d) => ymd(new Date(d.dt.getTime() - 864e5));
+const BUCKETS = [['Rest day', (e) => e === 0], ['Easy run', (e) => e > 0 && e < 60], ['Moderate run', (e) => e >= 60 && e < 120], ['Hard run', (e) => e >= 120]];
+const bucketOf = (e) => BUCKETS.find(([, f]) => f(e))[0];
+
+function renderAfter(rows) {
+  const rd = runDays();
+  const groups = BUCKETS.map(([label]) => ({ label, hrv: [], rhr: [] }));
+  for (const d of rows) {
+    const e = (rd.get(dayBefore(d)) || {}).effort || 0;
+    const g = groups.find((x) => x.label === bucketOf(e));
+    if (d.hrv != null) g.hrv.push(d.hrv);
+    if (d.rhr != null) g.rhr.push(d.rhr);
+  }
+  const base = groups[0], bh = d3.mean(base.hrv), br = d3.mean(base.rhr);
+  const diff = (a, b, unit, invert) => {
+    if (a == null || b == null) return '';
+    const v = a - b, good = invert ? v <= 0 : v >= 0;
+    return `<span class="note">${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)}${unit}</span>`;
+  };
+  const sumH = d3.sum(groups, (g) => g.hrv.length);
+  if (sumH < 10) { $('#after').innerHTML = '<p class="note">Not enough overlapping Garmin and Strava days in this period yet.</p>'; return; }
+  const hard = groups[3], hh = d3.mean(hard.hrv);
+  let line = '';
+  if (hard.hrv.length >= 3 && bh != null) {
+    const v = hh - bh;
+    line = Math.abs(v) < 1.5
+      ? `Hard runs barely move your HRV the next night (${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)} ms vs rest days). You're absorbing the load well.`
+      : v < 0
+        ? `After a hard run your HRV the next night is about <b>${Math.abs(v).toFixed(0)} ms lower</b> than after a rest day. Normal, and worth leaving an easy day after.`
+        : `Oddly, your HRV is about ${v.toFixed(0)} ms <i>higher</i> after hard runs than rest days. Often a sign rest days aren't very restful (late nights, stress, travel).`;
+  } else line = 'Not enough hard runs in this period to compare yet.';
+  $('#after').innerHTML = `<p style="margin:0 0 12px;font-size:13.5px">${line}</p>
+  <table><thead><tr><th>Day before</th><th class="r">Nights</th><th class="r">HRV</th><th class="r">vs rest</th><th class="r">Resting HR</th><th class="r">vs rest</th></tr></thead><tbody>` +
+    groups.map((g, i) => { const h = d3.mean(g.hrv), r = d3.mean(g.rhr); return `<tr><td>${g.label}</td><td class="r">${g.hrv.length}</td><td class="r">${h != null ? h.toFixed(1) + ' ms' : '–'}</td><td class="r">${i ? diff(h, bh, ' ms') : ''}</td><td class="r">${r != null ? r.toFixed(1) + ' bpm' : '–'}</td><td class="r">${i ? diff(r, br, ' bpm', true) : ''}</td></tr>`; }).join('') +
+    `</tbody></table><p class="note" style="margin-top:8px">Easy is effort under 60, moderate 60 to 119, hard 120+. Small groups (under 5 nights) are noisy.</p>`;
+}
+
+function renderLoad(rows) {
+  if (!rows.length) { $('#loadA').innerHTML = $('#loadB').innerHTML = ''; return; }
+  const first = weekStart(rows[0].dt), last = weekStart(rows[rows.length - 1].dt);
+  const weeks = d3.timeMondays(d3.timeDay.offset(first, -1), d3.timeDay.offset(last, 1)).map((k) => ({ k, effort: 0, runs: 0, hrv: [] }));
+  const wm = new Map(weeks.map((w) => [+w.k, w]));
+  for (const r of DB.runs) { if (r.flag === 'walk') continue; const w = wm.get(+weekStart(r.date)); if (w) { w.effort += r.effort || 0; w.runs++; } }
+  for (const d of rows) { const w = wm.get(+weekStart(d.dt)); if (w && d.hrv != null) w.hrv.push(d.hrv); }
+  weeks.forEach((w) => (w.hrvAvg = w.hrv.length ? d3.mean(w.hrv) : null));
+  const m = { t: 8, r: 14, b: 24, l: 54 };
+  const tipHtml = (w) => `<b>Week of ${fmtDate(w.k)}</b><br>${w.runs} run${w.runs === 1 ? '' : 's'} · effort ${w.effort}${w.hrvAvg != null ? `<br>Avg HRV ${w.hrvAvg.toFixed(1)} ms` : ''}`;
+  // top: load bars
+  {
+    const { svg, w } = chartBox('#loadA', 130), h = 130;
+    const x = d3.scaleBand().domain(weeks.map((d) => +d.k)).range([m.l, w - m.r]).paddingInner(0.25);
+    const y = d3.scaleLinear().domain([0, Math.max(100, d3.max(weeks, (d) => d.effort))]).nice().range([h - 6, m.t]);
+    svg.append('g').attr('class', 'gridline').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(3).tickSize(-(w - m.l - m.r)));
+    svg.selectAll('.gridline text').attr('x', -6);
+    const bw = x.bandwidth(), rad = Math.min(3, bw / 2);
+    svg.append('g').selectAll('path').data(weeks.filter((d) => d.effort > 0)).join('path').attr('fill', 'var(--s1)')
+      .attr('d', (d) => { const x0 = x(+d.k), y0 = y(d.effort), y1 = y(0), rr = Math.min(rad, y1 - y0); return `M${x0},${y1}V${y0 + rr}Q${x0},${y0} ${x0 + rr},${y0}H${x0 + bw - rr}Q${x0 + bw},${y0} ${x0 + bw},${y0 + rr}V${y1}Z`; });
+    svg.append('text').attr('x', m.l).attr('y', m.t + 2).attr('dy', '0.7em').attr('dx', 6).text('Effort');
+    svg.append('g').selectAll('rect').data(weeks).join('rect').attr('x', (d) => x(+d.k) - (x.step() - bw) / 2).attr('width', x.step()).attr('y', m.t).attr('height', h - m.t - 6).attr('fill', 'transparent')
+      .on('mousemove', (ev, d) => showTip(tipHtml(d), ev)).on('mouseleave', hideTip);
+  }
+  // bottom: weekly HRV line on the same band positions
+  {
+    const { svg, w } = chartBox('#loadB', 130), h = 130;
+    const x = d3.scaleBand().domain(weeks.map((d) => +d.k)).range([m.l, w - m.r]).paddingInner(0.25);
+    const cx = (d) => x(+d.k) + x.bandwidth() / 2;
+    const hv = weeks.filter((d) => d.hrvAvg != null);
+    if (hv.length < 2) return;
+    const ext = d3.extent(hv, (d) => d.hrvAvg), pad = (ext[1] - ext[0]) * 0.15 || 2;
+    const y = d3.scaleLinear().domain([ext[0] - pad, ext[1] + pad]).nice().range([h - m.b, m.t]);
+    svg.append('g').attr('class', 'gridline').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(3).tickSize(-(w - m.l - m.r)).tickFormat((v) => v + ' ms'));
+    svg.selectAll('.gridline text').attr('x', -6);
+    const every = Math.ceil(weeks.length / (w / 70));
+    svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${h - m.b})`).call(d3.axisBottom(x).tickValues(x.domain().filter((_, i) => i % every === 0)).tickFormat((v) => d3.timeFormat('%-d %b')(new Date(v))).tickSize(0).tickPadding(8));
+    svg.append('path').datum(hv).attr('fill', 'none').attr('stroke', 'var(--s2)').attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('d', d3.line().x(cx).y((d) => y(d.hrvAvg)));
+    svg.append('g').selectAll('circle').data(hv).join('circle').attr('cx', cx).attr('cy', (d) => y(d.hrvAvg)).attr('r', 3).attr('fill', 'var(--s2)');
+    svg.append('text').attr('x', m.l).attr('y', m.t + 2).attr('dy', '0.7em').attr('dx', 6).text('HRV');
+    svg.append('g').selectAll('rect').data(weeks).join('rect').attr('x', (d) => x(+d.k) - (x.step() - x.bandwidth()) / 2).attr('width', x.step()).attr('y', m.t).attr('height', h - m.t - m.b).attr('fill', 'transparent')
+      .on('mousemove', (ev, d) => showTip(tipHtml(d), ev)).on('mouseleave', hideTip);
+  }
 }
 
 function timeChart(sel, rows, keys, h, yfmt) {
@@ -425,7 +532,12 @@ function renderHrv(rows) {
   svg.append('path').datum(daily).attr('fill', 'none').attr('stroke', 'var(--s1)').attr('stroke-opacity', 0.45).attr('stroke-width', 1.5).attr('d', d3.line().x((d) => x(d.dt)).y((d) => y(d.hrv)));
   if (daily.length <= 120) svg.append('g').selectAll('circle').data(daily).join('circle').attr('cx', (d) => x(d.dt)).attr('cy', (d) => y(d.hrv)).attr('r', 3).attr('fill', 'var(--s1)');
   svg.append('path').datum(pts.filter((d) => d.hrv_week != null)).attr('fill', 'none').attr('stroke', 'var(--s2)').attr('stroke-width', 2).attr('d', d3.line().x((d) => x(d.dt)).y((d) => y(d.hrv_week)).curve(d3.curveMonotoneX));
-  hoverLayer(c, 'hrv', (d) => `<b>${fmtDate(d.dt)}</b><br>HRV ${d.hrv} ms${d.hrv_week ? ` · 7-day ${d.hrv_week}` : ''}${d.hrv_status ? `<br>${statusText(d.hrv_status)}` : ''}${d.hrv_low ? `<br>Baseline ${d.hrv_low}–${d.hrv_high}` : ''}`);
+  const rd = runDays(), [x0, x1] = x.domain();
+  const runPts = [...rd.entries()].map(([k, v]) => ({ dt: new Date(k + 'T00:00:00'), ...v })).filter((r) => r.dt >= x0 && r.dt <= x1);
+  const er = d3.scaleSqrt().domain([0, d3.max(runPts, (r) => r.effort) || 1]).range([3, 7]);
+  svg.append('g').selectAll('circle').data(runPts).join('circle').attr('cx', (r) => x(r.dt)).attr('cy', y.range()[0] - 8).attr('r', (r) => er(r.effort))
+    .attr('fill', 'var(--s3)').attr('stroke', 'var(--surface)').attr('stroke-width', 1.5);
+  hoverLayer(c, 'hrv', (d) => { const prev = rd.get(dayBefore(d)); return `<b>${fmtDate(d.dt)}</b><br>HRV ${d.hrv} ms${d.hrv_week ? ` · 7-day ${d.hrv_week}` : ''}${d.hrv_status ? `<br>${statusText(d.hrv_status)}` : ''}${d.hrv_low ? `<br>Baseline ${d.hrv_low}–${d.hrv_high}` : ''}<br>${prev ? `Day before: ${fmtKm(prev.dist)} km, effort ${prev.effort}` : 'Day before: no run'}`; });
 }
 
 function renderRhr(rows) {
