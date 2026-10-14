@@ -116,6 +116,40 @@ def day(api, d):
     return row
 
 
+def calendar(api, today):
+    """Scheduled workouts from 5 weeks back to 26 weeks ahead."""
+    items, seen = [], set()
+    y, m = today.year, today.month - 2
+    for _ in range(8):
+        if m < 1:
+            y, m = y - 1, m + 12
+        if m > 12:
+            y, m = y + 1, m - 12
+        if (y, m) not in seen:
+            seen.add((y, m))
+            r = call(api.connectapi, f"/calendar-service/year/{y}/month/{m - 1}")  # Garmin months are 0-based
+            for it in (r or {}).get("calendarItems", []) or []:
+                kind = it.get("itemType") or ""
+                if kind in ("activity", "weight", "steps", "sleep"):
+                    continue
+                items.append({
+                    "date": it.get("date"),
+                    "type": kind,
+                    "title": it.get("title") or it.get("workoutName") or "",
+                    "sport": it.get("sportTypeKey") or "",
+                    "dur": it.get("duration") or it.get("estimatedDurationInSecs"),
+                    "dist": it.get("distance") or it.get("estimatedDistanceInMeters"),
+                    "race": bool(it.get("isRace")) or kind == "event",
+                })
+        m += 1
+    if not items and not seen:
+        return None
+    lo = (today - dt.timedelta(days=35)).isoformat()
+    items = [i for i in items if i["date"] and i["date"] >= lo]
+    items.sort(key=lambda i: i["date"])
+    return items
+
+
 def main():
     pw = os.environ.get("DASHBOARD_PASSWORD", "")
     if len(pw) < 8:
@@ -148,6 +182,14 @@ def main():
             out["race"] = {"date": today.isoformat(), **race}
     if "race" not in out and existing.get("race"):
         out["race"] = existing["race"]
+    # Planned workouts (Runna pushes its plan to the Garmin calendar)
+    plan = calendar(api, today)
+    if plan is not None:
+        out["plan"] = plan
+        kinds = sorted({p["type"] for p in plan})
+        print(f"::notice::Garmin calendar: {len(plan)} items from {plan[0]['date'] if plan else '-'} to {plan[-1]['date'] if plan else '-'}; types {kinds}")
+    elif existing.get("plan"):
+        out["plan"] = existing["plan"]
     OUT.write_text(json.dumps(encrypt(out, pw)))
     print(f"{len(out['days'])} days saved")
 
