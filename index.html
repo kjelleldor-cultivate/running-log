@@ -162,11 +162,17 @@ footer { margin-top: 24px; font-size: 12.5px; color: var(--muted); }
     <div class="wgrid" id="well" hidden>
       <div class="sect"><h3>Recovery</h3><span id="wellSub">From Garmin</span></div>
       <div class="kpis" id="wkpis"></div>
-      <div class="card span-12">
+      <div class="card span-7">
         <h2>HRV over time</h2>
         <p class="cap" id="hrvTrendCap">Your long-term direction, using all your Garmin history regardless of the filter above.</p>
         <div class="legend"><span><i class="line" style="background:var(--s1)"></i>30-day average</span><span><i class="line" style="background:var(--muted)"></i>Trend</span></div>
         <div id="hrvTrend"></div>
+      </div>
+      <div class="card span-5">
+        <h2>VO2 max over time</h2>
+        <p class="cap" id="vo2Cap">Garmin's estimate of your aerobic fitness. It updates after outdoor runs with heart rate.</p>
+        <div class="legend"><span><i style="background:var(--s1)"></i>VO2 max (ml/kg/min)</span></div>
+        <div id="vo2"></div>
       </div>
       <div class="card span-12">
         <h2>Heart rate variability (overnight)</h2>
@@ -424,7 +430,24 @@ function renderWell() {
   renderHrv(rows); renderRhr(rows); renderSleep(rows);
   renderAfter(rows); renderLoad(rows);
   renderHrvTrend(all);
+  renderVo2(all);
   renderPredict(DB.runs);
+}
+
+// ---------- VO2 max trend ----------
+function renderVo2(all) {
+  const d = all.filter((x) => x.vo2 != null);
+  // keep only the days it changed, plus the latest, so the line shows real updates
+  const pts = d.filter((x, i) => i === 0 || i === d.length - 1 || x.vo2 !== d[i - 1].vo2);
+  const c = timeChart('#vo2', pts, ['vo2'], 200, (v) => (+v).toFixed(0));
+  if (!c) { $('#vo2Cap').textContent = 'No VO2 max readings yet. Garmin needs a few outdoor runs with heart rate.'; return; }
+  const { svg, x, y } = c;
+  svg.append('path').datum(pts).attr('fill', 'none').attr('stroke', 'var(--s1)').attr('stroke-width', 2).attr('d', d3.line().x((p) => x(p.dt)).y((p) => y(p.vo2)).curve(d3.curveStepAfter));
+  svg.append('g').selectAll('circle').data(pts).join('circle').attr('cx', (p) => x(p.dt)).attr('cy', (p) => y(p.vo2)).attr('r', 4).attr('fill', 'var(--s1)').attr('stroke', 'var(--surface)').attr('stroke-width', 2);
+  hoverLayer(c, 'vo2', (p) => `<b>${fmtDate(p.dt)}</b><br>VO2 max ${(+p.vo2).toFixed(1)}`);
+  const a = pts[0], b = pts[pts.length - 1], diff = b.vo2 - a.vo2;
+  const peak = pts.reduce((m, p) => (p.vo2 > m.vo2 ? p : m), pts[0]);
+  $('#vo2Cap').innerHTML = `Now <b>${(+b.vo2).toFixed(1)}</b>, ${Math.abs(diff) < 0.5 ? 'about the same as' : diff > 0 ? `up ${diff.toFixed(1)} from` : `down ${Math.abs(diff).toFixed(1)} from`} ${(+a.vo2).toFixed(1)} on ${fmtDate(a.dt)}. Highest: ${(+peak.vo2).toFixed(1)} (${fmtDate(peak.dt)}). Updates after outdoor runs with heart rate.`;
 }
 
 // ---------- HRV long-term trend ----------
