@@ -33,3 +33,15 @@ secret, then run the workflow with days = 180 to rebuild it.
 
 The Garmin side uses the unofficial `garminconnect` library, so it may break
 when Garmin changes its login. Check the Actions tab if the data stops updating.
+
+## Training-block views
+
+- **Today**: a go hard / keep it easy / rest verdict from HRV, resting heart
+  rate, sleep, Garmin readiness and training form, plus today's Runna session.
+- **Road to Brighton**: countdown, phase, predicted marathon vs the 4:00 goal,
+  and this week's Runna plan next to what was actually run. Goal settings live
+  in the `GOAL` constant in `index.html`.
+- **Heart rate** (`data/hr.json`, built by `scripts/hr_metrics.py` from Strava
+  streams): time in zones, aerobic efficiency and heart-rate drift per run.
+- The Runna plan arrives through the Garmin calendar (Runna syncs workouts to
+  Garmin) and is stored inside the encrypted Garmin file.

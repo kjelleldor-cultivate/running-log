@@ -15,6 +15,8 @@
   --text: #0b0b0b; --text-2: #52514e; --muted: #85837c;
   --s1: #2a78d6; --s1-soft: #86b6ef; --s2: #eb6834; --s3: #1baf7a;
   --grid: #ecebe5; --accent: #fc4c02;
+  --good: #0e8a5f; --warn: #b87700; --bad: #c93a3a;
+  --z1: #cde2fb; --z2: #86b6ef; --z3: #3987e5; --z4: #1c5cab; --z5: #0d366b;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -23,6 +25,8 @@
     --text: #f0efec; --text-2: #c3c2b7; --muted: #8e8d86;
     --s1: #3987e5; --s1-soft: #1c5cab; --s2: #d95926; --s3: #199e70;
     --grid: #262624;
+    --good: #2fb27c; --warn: #d9a12a; --bad: #e66767;
+    --z1: #184f95; --z2: #256abf; --z3: #3987e5; --z4: #6da7ec; --z5: #b7d3f6;
   }
 }
 :root[data-theme="dark"] {
@@ -31,6 +35,8 @@
   --text: #f0efec; --text-2: #c3c2b7; --muted: #8e8d86;
   --s1: #3987e5; --s1-soft: #1c5cab; --s2: #d95926; --s3: #199e70;
   --grid: #262624;
+  --good: #2fb27c; --warn: #d9a12a; --bad: #e66767;
+  --z1: #184f95; --z2: #256abf; --z3: #3987e5; --z4: #6da7ec; --z5: #b7d3f6;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 Inter, system-ui, sans-serif; }
@@ -116,6 +122,30 @@ td a:hover { text-decoration: underline; }
 .wgrid { grid-column: span 12; display: grid; gap: 14px; grid-template-columns: repeat(12, 1fr); }
 .wgrid[hidden], .lock[hidden] { display: none; }
 .status { display: inline-block; font-size: 11.5px; padding: 1px 7px; border-radius: 5px; border: 1px solid var(--border); color: var(--text-2); margin-left: 4px; vertical-align: 2px; }
+.today { display: grid; grid-template-columns: minmax(220px, 1fr) 2fr; gap: 18px; align-items: start; }
+@media (max-width: 760px) { .today { grid-template-columns: 1fr; } }
+.verdict { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; margin: 4px 0 6px; display: flex; gap: 10px; align-items: center; }
+.vdot { width: 14px; height: 14px; border-radius: 50%; flex: none; }
+.sig { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; font-size: 13.5px; }
+.sig li { display: grid; grid-template-columns: 22px 1fr; gap: 6px; align-items: start; }
+.ico { width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff; }
+.ico.good { background: var(--good); } .ico.warn { background: var(--warn); } .ico.bad { background: var(--bad); } .ico.na { background: var(--muted); }
+.planbox { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-top: 12px; font-size: 13.5px; }
+.planbox .l { font-size: 12px; color: var(--muted); }
+.tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 6px 0 14px; }
+@media (max-width: 900px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
+.tile { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.tile .l { font-size: 12px; color: var(--text-2); } .tile .v { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; } .tile .d { font-size: 12px; color: var(--muted); }
+.week { display: grid; gap: 5px; margin-top: 8px; }
+.day { border: 1px solid var(--border); border-radius: 9px; padding: 7px 10px; font-size: 13px; display: grid; grid-template-columns: 62px 1fr auto; gap: 10px; align-items: baseline; }
+.day.today-d { border-color: var(--text-2); }
+.day .dn { font-size: 11.5px; color: var(--muted); }
+.day .pl { color: var(--text-2); }
+.day .dn b { color: var(--text); font-weight: 600; }
+.day .done { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.day .done.miss { color: var(--muted); font-weight: 400; }
+#after, #pred { overflow-x: auto; }
+@media (max-width: 520px) { #after table, #pred table { font-size: 12.5px; } #after th, #after td, #pred th, #pred td { padding: 6px 5px; } }
 footer { margin-top: 24px; font-size: 12.5px; color: var(--muted); }
 </style>
 </head>
@@ -157,6 +187,41 @@ footer { margin-top: 24px; font-size: 12.5px; color: var(--muted); }
   </div>
 
   <div class="grid" id="app">
+    <div class="card span-12" id="todayCard">
+      <div class="today">
+        <div>
+          <h2 id="todayDate">Today</h2>
+          <div class="verdict" id="verdict"></div>
+          <p class="cap" id="verdictSub" style="margin:0"></p>
+          <div class="planbox" id="todayPlan"></div>
+        </div>
+        <div><ul class="sig" id="signals"></ul></div>
+      </div>
+    </div>
+
+    <div class="card span-12" id="brighton">
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline">
+        <div><h2>Road to Brighton</h2><p class="cap" id="bPhase" style="margin:0"></p></div>
+        <div class="note" id="bGoal"></div>
+      </div>
+      <div id="bTimeline" style="margin:10px 0 4px"></div>
+      <div class="tiles" id="bTiles"></div>
+      <div class="grid" style="gap:18px">
+        <div class="span-7" style="min-width:0">
+          <h2>Predicted marathon vs sub-4</h2>
+          <p class="cap">Week by week, from your best run of 5 km+ in the previous six weeks (Riegel). Higher on the chart is faster.</p>
+          <div class="legend"><span><i class="line" style="background:var(--s1)"></i>Prediction from Strava runs</span><span id="bGarLeg" hidden><i class="line" style="background:var(--s2)"></i>Garmin's prediction</span><span><i class="line" style="background:var(--muted)"></i>4:00 goal</span></div>
+          <div id="bPred"></div>
+        </div>
+        <div class="span-5" style="min-width:0">
+          <h2>This week</h2>
+          <p class="cap" id="bWeekCap">Your plan from Runna (via Garmin) and what you actually ran.</p>
+          <div class="week" id="bWeek"></div>
+          <div id="bNext" class="note" style="margin-top:10px"></div>
+        </div>
+      </div>
+    </div>
+
     <div class="kpis" id="kpis"></div>
 
     <div class="wgrid" id="well" hidden>
@@ -224,6 +289,29 @@ footer { margin-top: 24px; font-size: 12.5px; color: var(--muted); }
       <div class="best" id="best"></div>
     </div>
 
+    <div class="sect"><h3>Heart rate</h3><span>From Strava · runs since late April 2026</span></div>
+
+    <div class="card span-12">
+      <h2>Time in heart-rate zones</h2>
+      <p class="cap" id="zoneCap"></p>
+      <div class="legend" id="zoneLeg"></div>
+      <div id="zones"></div>
+      <p class="note" id="zoneNote" style="margin:8px 0 0"></p>
+    </div>
+
+    <div class="card span-7">
+      <h2>Aerobic efficiency</h2>
+      <p class="cap" id="efCap">Metres per minute per heartbeat. If it rises, you're running faster for the same effort: the clearest sign base training is working.</p>
+      <div class="legend"><span><i style="background:var(--s1)"></i>Each run</span><span><i class="line" style="background:var(--s2)"></i>Rolling average (5 runs)</span></div>
+      <div id="ef"></div>
+    </div>
+
+    <div class="card span-5">
+      <h2>Heart-rate drift on longer runs</h2>
+      <p class="cap" id="driftCap">How much your heart rate creeps up for the same pace over runs of 40+ minutes. Under 5% means your aerobic engine is coping with that pace.</p>
+      <div id="drift"></div>
+    </div>
+
     <div class="card span-7">
       <h2>Fitness and fatigue</h2>
       <p class="cap">Built from Strava relative effort, like Strava's Fitness &amp; Freshness. Fitness is a 42-day weighted average of effort, fatigue a 7-day one. Runs only.</p>
@@ -269,7 +357,10 @@ footer { margin-top: 24px; font-size: 12.5px; color: var(--muted); }
 const DATA_URL = 'data/runs.json';
 let DB = null, RANGE = '365';
 const GARMIN_URL = 'data/garmin.enc.json';
-let GENV = null, GDATA = null, PW = null;
+let GENV = null, GDATA = null, PW = null, HRD = null;
+const GOAL = { race: 'Brighton Marathon', date: '2027-04-04', target: 4 * 3600, dist: 42195,
+  half: { name: 'Brighton Half', date: '2027-02-28' }, baseStart: '2026-10-05', blockStart: '2026-11-16', blockWeeks: 20 };
+const dOnly = (s) => new Date(s + 'T00:00:00');
 
 // ---------- helpers ----------
 const $ = (s) => document.querySelector(s);
@@ -314,7 +405,7 @@ async function loadGarmin() {
   else lockedUI();
 }
 function lockedUI(msg) {
-  GDATA = null; $('#well').hidden = true; $('#lockForm').style.display = 'contents'; $('#relock').hidden = true;
+  GDATA = null; if (DB) { renderToday(); renderBrighton(); renderPredict(DB.runs); } $('#well').hidden = true; $('#lockForm').style.display = 'contents'; $('#relock').hidden = true;
   $('#lockMsg').textContent = msg || '🔒 Recovery data from Garmin is locked.';
 }
 async function unlock(pw, remember) {
@@ -354,6 +445,8 @@ async function load(manual) {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const before = DB ? DB.runs.length : null;
     DB = normalise(await res.json());
+    try { const h = await fetch('data/hr.json?t=' + Date.now(), { cache: 'no-store' }); HRD = h.ok ? await h.json() : null; } catch (e) { HRD = null; }
+    for (const r of DB.runs) r.hr = HRD && HRD.runs[r.id] ? HRD.runs[r.id] : null;
     render();
     await loadGarmin();
     if (manual) {
@@ -395,6 +488,8 @@ function render() {
   renderBest(all);
   renderFitness(all);
   renderPredict(all);
+  renderZones(runs); renderEf(runs); renderDrift(runs);
+  renderToday(); renderBrighton();
   renderYears(all);
   renderShoes(all);
   renderLog();
@@ -431,6 +526,7 @@ function renderWell() {
   renderAfter(rows); renderLoad(rows);
   renderHrvTrend(all);
   renderVo2(all);
+  renderToday(); renderBrighton();
   renderPredict(DB.runs);
 }
 
@@ -835,6 +931,250 @@ function renderLog() {
   $('#logCap').textContent = `${rs.length} runs, ${rangeLabel()}${q ? ` matching "${q}"` : ''}`;
   $('#log').innerHTML = `<thead><tr><th>Date</th><th>Run</th><th class="r">Distance</th><th class="r">Time</th><th class="r">Pace</th><th class="r">Climb</th><th class="r">Effort</th><th class="r">Cadence</th></tr></thead><tbody>` +
     rs.map((r) => `<tr><td style="white-space:nowrap">${fmtDate(r.date)}</td><td><a href="https://www.strava.com/activities/${r.id}" target="_blank" rel="noopener">${esc(r.name)}</a>${r.indoor ? '<span class="tag">treadmill</span>' : ''}${r.flag === 'walk' ? '<span class="tag">walk</span>' : ''}${r.flag === 'gps' ? '<span class="tag">GPS glitch</span>' : ''}${r.prs ? `<span class="tag pr">${r.prs} PR${r.prs > 1 ? 's' : ''}</span>` : ''}<div class="note">${esc(r.loc || 'Indoors')}</div></td><td class="r">${fmtKm(r.dist_m, 2)} km</td><td class="r">${fmtClock(r.moving_s)}</td><td class="r">${r.paceOK ? fmtPace(r.pace) + '/km' : '–'}</td><td class="r">${Math.round(r.elev_m || 0)} m</td><td class="r">${r.effort ?? '–'}</td><td class="r">${r.cadence ? Math.round(r.cadence * 2) + ' spm' : '–'}</td></tr>`).join('') + '</tbody>';
+}
+
+// ---------- shared ----------
+const STATUS = { good: ['✓', 'good'], warn: ['!', 'warn'], bad: ['✕', 'bad'], na: ['–', 'na'] };
+const workouts = () => (GDATA && GDATA.plan ? GDATA.plan.filter((p) => p.type === 'workout' || p.type === 'fbtAdaptiveWorkout') : []);
+const events = () => (GDATA && GDATA.plan ? GDATA.plan.filter((p) => p.type === 'event' || p.race) : []);
+const planDesc = (p) => { const bits = [p.title || 'Workout']; if (p.dist) bits.push(fmtKm(p.dist) + ' km'); else if (p.dur) bits.push(fmtDur(p.dur)); return bits.join(' · '); };
+function riegel(r, D) { return r.moving_s * Math.pow(D / r.dist_m, 1.06); }
+
+// ---------- Today ----------
+function renderToday() {
+  if (!DB) return;
+  const now = new Date(), today = ymd(now);
+  $('#todayDate').textContent = 'Today · ' + now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  const sig = []; let score = 0, counted = 0;
+  const add = (lvl, text) => { sig.push([lvl, text]); if (lvl !== 'na') { counted++; score += lvl === 'bad' ? 2 : lvl === 'warn' ? 1 : 0; } };
+  // form from Strava effort
+  const fs = fitnessSeries(DB.runs), f = fs[fs.length - 1];
+  if (f) {
+    if (f.form < -25) add('bad', `Form ${f.form.toFixed(0)}: recent load is well above your fitness. Your legs are carrying a lot.`);
+    else if (f.form < -10) add('warn', `Form ${f.form.toFixed(0)}: you're in a building phase, carrying some fatigue.`);
+    else add('good', `Form ${f.form.toFixed(0)}: fatigue is under control.`);
+  }
+  const lastRun = DB.runs[0], daysSince = Math.floor((new Date(today) - new Date(lastRun.start.slice(0, 10))) / 864e5);
+  if (GDATA) {
+    const days = GDATA.days.map((d) => ({ ...d, dt: dOnly(d.date) }));
+    const h = lastVal(days, 'hrv');
+    const stale = h && (now - h.dt) / 864e5 > 2;
+    if (!h) add('na', 'No HRV reading yet.');
+    else if (stale) add('na', `Latest HRV is from ${fmtDate(h.dt)}. Wear the watch overnight for a fresh reading.`);
+    else if (h.hrv_low && h.hrv < h.hrv_low) add('bad', `HRV ${h.hrv} ms is below your normal range (${h.hrv_low}–${h.hrv_high}).`);
+    else if (h.hrv_high && h.hrv > h.hrv_high) add('good', `HRV ${h.hrv} ms is above your normal range. Well recovered.`);
+    else add('good', `HRV ${h.hrv} ms is inside your normal range${h.hrv_low ? ` (${h.hrv_low}–${h.hrv_high})` : ''}.`);
+    const r = lastVal(days, 'rhr');
+    if (r) {
+      const base = d3.mean(days.filter((d) => d.rhr != null && d.dt < r.dt && d.dt >= new Date(r.dt.getTime() - 30 * 864e5)), (d) => d.rhr);
+      const diff = base != null ? r.rhr - base : 0;
+      if (diff >= 5) add('bad', `Resting HR ${r.rhr} bpm, ${diff.toFixed(0)} above your 30-day average. Possible fatigue or something brewing.`);
+      else if (diff >= 3) add('warn', `Resting HR ${r.rhr} bpm, ${diff.toFixed(0)} above your 30-day average.`);
+      else add('good', `Resting HR ${r.rhr} bpm, normal for you${base ? ` (average ${base.toFixed(0)})` : ''}.`);
+    }
+    const sl = lastVal(days, 'sleep_h');
+    if (sl && (now - sl.dt) / 864e5 <= 2) {
+      const hm = `${Math.floor(sl.sleep_h)}h ${String(Math.round((sl.sleep_h % 1) * 60)).padStart(2, '0')}m`;
+      if (sl.sleep_h < 6) add('bad', `Short sleep: ${hm}${sl.sleep_score ? `, score ${sl.sleep_score}` : ''}.`);
+      else if (sl.sleep_h < 7 || (sl.sleep_score && sl.sleep_score < 60)) add('warn', `Sleep ${hm}${sl.sleep_score ? `, score ${sl.sleep_score}` : ''}. A bit light.`);
+      else add('good', `Sleep ${hm}${sl.sleep_score ? `, score ${sl.sleep_score}` : ''}.`);
+    }
+    const rd = lastVal(days, 'readiness');
+    if (rd && (now - rd.dt) / 864e5 <= 1) add(rd.readiness < 25 ? 'bad' : rd.readiness < 50 ? 'warn' : 'good', `Garmin training readiness ${rd.readiness}/100.`);
+  } else if (GENV) add('na', 'Unlock above to add HRV, resting heart rate and sleep to this verdict.');
+  add('na', daysSince === 0 ? `Already ran today: ${fmtKm(lastRun.dist_m)} km.` : `Last run ${daysSince === 1 ? 'yesterday' : daysSince + ' days ago'}: ${fmtKm(lastRun.dist_m)} km at ${fmtPace(lastRun.pace)}/km.`);
+  let v;
+  if (!counted) v = ['na', 'Not enough data yet'];
+  else if (score >= 3) v = ['bad', 'Rest or very easy'];
+  else if (score >= 1) v = ['warn', 'Keep it easy'];
+  else v = ['good', 'Good to train hard'];
+  $('#verdict').innerHTML = `<span class="vdot" style="background:var(--${v[0] === 'na' ? 'muted' : v[0]})"></span>${v[1]}`;
+  $('#verdictSub').textContent = GDATA ? 'Based on your recovery overnight and your recent training load.' : 'Based on your recent training load only. Unlock for recovery data.';
+  $('#signals').innerHTML = sig.map(([l, t]) => `<li><span class="ico ${STATUS[l][1]}" aria-label="${STATUS[l][1]}">${STATUS[l][0]}</span><span>${t}</span></li>`).join('');
+  // plan
+  const ws = workouts();
+  if (!GDATA) { $('#todayPlan').innerHTML = `<div class="l">Today's plan</div>${GENV ? 'Unlock to see your Runna sessions.' : 'Plan data appears once the Garmin sync runs.'}`; return; }
+  const tw = ws.filter((p) => p.date === today), next = ws.find((p) => p.date > today);
+  const ranToday = DB.runs.filter((r) => r.start.slice(0, 10) === today);
+  let html = `<div class="l">Today's plan</div>${tw.length ? tw.map((p) => `<b>${esc(planDesc(p))}</b>`).join('<br>') : 'Rest day in your plan.'}`;
+  if (ranToday.length) html += `<div class="note" style="margin-top:4px">Done: ${ranToday.map((r) => `${fmtKm(r.dist_m)} km at ${fmtPace(r.pace)}/km`).join(', ')} ✓</div>`;
+  if (next) html += `<div class="note" style="margin-top:6px">Next: ${new Date(next.date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}, ${esc(planDesc(next))}</div>`;
+  if (v[0] === 'bad' && tw.length) html += `<div class="note" style="margin-top:6px">Recovery looks poor. Consider swapping today's session for an easy run or rest.</div>`;
+  $('#todayPlan').innerHTML = html;
+}
+
+// ---------- Road to Brighton ----------
+function renderBrighton() {
+  if (!DB) return;
+  const now = new Date(), today = dOnly(ymd(now));
+  const race = dOnly(GOAL.date), half = dOnly(GOAL.half.date), base = dOnly(GOAL.baseStart), block = dOnly(GOAL.blockStart);
+  const daysTo = Math.round((race - today) / 864e5), daysHalf = Math.round((half - today) / 864e5);
+  let phase;
+  if (today < block) phase = `Base building (Runna "Run Further"), week ${Math.floor((today - base) / (7 * 864e5)) + 1}. The 20-week marathon block starts ${fmtDate(block)}.`;
+  else if (today <= race) phase = `Marathon block, week ${Math.min(GOAL.blockWeeks, Math.floor((today - block) / (7 * 864e5)) + 1)} of ${GOAL.blockWeeks}.`;
+  else phase = 'Race done. Recover well.';
+  $('#bPhase').textContent = phase;
+  $('#bGoal').innerHTML = `${GOAL.race}, ${fmtDate(race)} · goal sub-4 (5:41/km)`;
+  // timeline
+  {
+    const node = $('#bTimeline'); node.innerHTML = '';
+    const w = node.clientWidth || 600, narrow = w < 560, h = narrow ? 66 : 54, m = { l: 8, r: 8 };
+    const svg = d3.select(node).append('svg').attr('width', w).attr('height', h);
+    const x = d3.scaleTime().domain([base, race]).range([m.l, w - m.r]).clamp(true);
+    svg.append('rect').attr('x', x(base)).attr('y', 22).attr('width', x(race) - x(base)).attr('height', 8).attr('rx', 4).attr('fill', 'var(--grid)');
+    svg.append('rect').attr('x', x(base)).attr('y', 22).attr('width', Math.max(0, x(today) - x(base))).attr('height', 8).attr('rx', 4).attr('fill', 'var(--s1)');
+    const marks = narrow ? [[base, 'Base'], [block, 'Block'], [half, 'Half'], [race, 'Race']] : [[base, 'Base start'], [block, 'Block starts'], [half, GOAL.half.name], [race, 'Brighton']];
+    marks.forEach(([d, l], i) => {
+      const xx = x(d), anchor = i === 0 ? 'start' : i === marks.length - 1 ? 'end' : 'middle';
+      svg.append('line').attr('x1', xx).attr('x2', xx).attr('y1', 18).attr('y2', 34).attr('stroke', 'var(--text-2)').attr('stroke-width', 1.5);
+      svg.append('text').attr('x', xx).attr('y', narrow && i % 2 ? 60 : 48).attr('text-anchor', anchor).text(l);
+    });
+    svg.append('circle').attr('cx', x(today)).attr('cy', 26).attr('r', 7).attr('fill', 'var(--s1)').attr('stroke', 'var(--surface)').attr('stroke-width', 3);
+    svg.append('text').attr('x', x(today)).attr('y', 11).attr('text-anchor', 'middle').style('fill', 'var(--text)').style('font-weight', 600).text('Today');
+  }
+  // tiles
+  const six = new Date(today.getTime() - 42 * 864e5), four = new Date(today.getTime() - 28 * 864e5);
+  const ok6 = DB.runs.filter((r) => r.paceOK && r.dist_m >= 5000 && r.date >= six);
+  const best = ok6.length ? ok6.reduce((a, r) => (riegel(r, GOAL.dist) < riegel(a, GOAL.dist) ? r : a)) : null;
+  const pred = best ? riegel(best, GOAL.dist) : null;
+  const gap = pred != null ? pred - GOAL.target : null;
+  const longest = d3.max(DB.runs.filter((r) => r.date >= six && r.flag !== 'walk'), (r) => r.dist_m) || 0;
+  const wk4 = d3.sum(DB.runs.filter((r) => r.date >= four && r.flag !== 'walk'), (r) => r.dist_m) / 4;
+  const hrRuns = DB.runs.filter((r) => r.hr && r.date >= four);
+  const zt = [0, 1, 2, 3, 4].map((i) => d3.sum(hrRuns, (r) => r.hr.zs[i]));
+  const easyPct = d3.sum(zt) ? (zt[0] + zt[1]) / d3.sum(zt) * 100 : null;
+  const gr = GDATA && GDATA.race;
+  const tiles = [
+    ['Days to go', daysTo, `${GOAL.half.name} in ${daysHalf} days`],
+    ['Predicted marathon', pred ? fmtClock(pred) : '–', gap == null ? 'needs a 5 km+ run in the last 6 weeks' : gap <= 0 ? `${Math.round(-gap / 60)} min inside 4:00${gr && gr.marathon ? ` · Garmin ${fmtClock(gr.marathon)}` : ''}` : `${Math.round(gap / 60)} min to find${gr && gr.marathon ? ` · Garmin ${fmtClock(gr.marathon)}` : ''}`],
+    ['Longest run, 6 weeks', fmtKm(longest) + ' km', 'build towards 30–32 km by mid-March'],
+    ['Weekly distance', fmtKm(wk4) + ' km', 'average, last 4 weeks'],
+    ['Easy-zone running', easyPct == null ? '–' : Math.round(easyPct) + '%', 'of run time in Z1–2, last 4 weeks · aim ~75%+ in base'],
+  ];
+  $('#bTiles').innerHTML = tiles.map(([l, v, d]) => `<div class="tile"><div class="l">${l}</div><div class="v">${v}</div><div class="d">${d}</div></div>`).join('');
+  // prediction over time
+  {
+    const start = dOnly('2026-04-27');
+    const weeks = d3.timeMondays(start, d3.timeDay.offset(today, 1));
+    const pts = weeks.map((wk) => {
+      const end = d3.timeDay.offset(wk, 7), from = d3.timeDay.offset(end, -42);
+      const c = DB.runs.filter((r) => r.paceOK && r.dist_m >= 5000 && r.date >= from && r.date < end);
+      if (!c.length) return null;
+      const b = c.reduce((a, r) => (riegel(r, GOAL.dist) < riegel(a, GOAL.dist) ? r : a));
+      return { dt: wk, p: riegel(b, GOAL.dist), run: b };
+    }).filter(Boolean);
+    const gpts = gr ? Object.entries(GDATA.race_hist || {}).filter(([, v]) => v.marathon).map(([k, v]) => ({ dt: dOnly(k), p: v.marathon })) : [];
+    $('#bGarLeg').hidden = !gpts.length;
+    const all = pts.concat(gpts);
+    const node = $('#bPred'); node.innerHTML = '';
+    if (all.length < 2) { node.innerHTML = '<p class="note">Builds up as you log runs.</p>'; }
+    else {
+      const w = node.clientWidth || 600, h = 220, m = { t: 12, r: 14, b: 26, l: 54 };
+      const svg = d3.select(node).append('svg').attr('width', w).attr('height', h);
+      const x = d3.scaleTime().domain(d3.extent(all, (d) => d.dt)).range([m.l, w - m.r]);
+      const ext = d3.extent(all.map((d) => d.p).concat([GOAL.target]));
+      const y = d3.scaleLinear().domain([ext[1] + 300, ext[0] - 300]).range([h - m.b, m.t]);
+      const tick = 10 * 60, tv = []; for (let t = Math.ceil(y.domain()[1] / tick) * tick; t <= y.domain()[0]; t += tick) tv.push(t);
+      svg.append('g').attr('class', 'gridline').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).tickValues(tv).tickSize(-(w - m.l - m.r)).tickFormat((v) => fmtClock(v).replace(/:00$/, '')));
+      svg.selectAll('.gridline text').attr('x', -6);
+      svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${h - m.b})`).call(d3.axisBottom(x).ticks(Math.max(2, Math.floor(w / 90))).tickSize(0).tickPadding(8));
+      svg.append('line').attr('x1', m.l).attr('x2', w - m.r).attr('y1', y(GOAL.target)).attr('y2', y(GOAL.target)).attr('stroke', 'var(--muted)').attr('stroke-width', 1.5).attr('stroke-dasharray', '6 4');
+      svg.append('text').attr('x', w - m.r).attr('y', y(GOAL.target) - 6).attr('text-anchor', 'end').text('4:00 goal');
+      const gapped = []; pts.forEach((d, i) => { if (i && d.dt - pts[i - 1].dt > 8 * 864e5) gapped.push(null); gapped.push(d); });
+      svg.append('path').datum(gapped).attr('fill', 'none').attr('stroke', 'var(--s1)').attr('stroke-width', 2).attr('d', d3.line().defined((d) => d).x((d) => x(d.dt)).y((d) => y(d.p)).curve(d3.curveStepAfter));
+      if (gpts.length > 1) svg.append('path').datum(gpts).attr('fill', 'none').attr('stroke', 'var(--s2)').attr('stroke-width', 2).attr('d', d3.line().x((d) => x(d.dt)).y((d) => y(d.p)));
+      if (gpts.length) svg.append('g').selectAll('circle').data(gpts).join('circle').attr('cx', (d) => x(d.dt)).attr('cy', (d) => y(d.p)).attr('r', 4).attr('fill', 'var(--s2)');
+      svg.append('g').selectAll('circle').data(pts).join('circle').attr('cx', (d) => x(d.dt)).attr('cy', (d) => y(d.p)).attr('r', 3.5).attr('fill', 'var(--s1)');
+      const c = { svg, x, y, m, w, h, pts: pts.map((d) => ({ ...d })) };
+      hoverLayer(c, 'p', (d) => `<b>Week of ${fmtDate(d.dt)}</b><br>Predicted ${fmtClock(d.p)}<br>From ${esc(d.run.name)}, ${fmtKm(d.run.dist_m)} km at ${fmtPace(d.run.pace)}/km (${fmtDate(d.run.date)})`);
+    }
+  }
+  // this week: plan vs done
+  {
+    const mon = weekStart(today), ws = workouts();
+    const days = d3.range(7).map((i) => d3.timeDay.offset(mon, i));
+    if (!GDATA) $('#bWeekCap').textContent = GENV ? 'Unlock to see your Runna plan next to what you ran.' : 'What you ran this week.';
+    else $('#bWeekCap').textContent = ws.length ? 'Your plan from Runna (via Garmin) and what you actually ran.' : 'No planned workouts found on your Garmin calendar yet.';
+    $('#bWeek').innerHTML = days.map((d) => {
+      const k = ymd(d), plan = ws.filter((p) => p.date === k), ran = DB.runs.filter((r) => r.start.slice(0, 10) === k && r.flag !== 'walk');
+      const past = d < today, isToday = +d === +today;
+      const done = ran.length ? `<div class="done">${fmtKm(d3.sum(ran, (r) => r.dist_m))} km ✓</div>` : plan.length && past ? '<div class="done miss">Not run</div>' : '';
+      return `<div class="day${isToday ? ' today-d' : ''}"><div class="dn"><b>${d.toLocaleDateString('en-GB', { weekday: 'short' })}</b> ${d.getDate()}</div>${plan.length ? `<div class="pl">${plan.map((p) => esc(planDesc(p))).join('<br>')}</div>` : `<div class="pl" style="color:var(--muted)">${GDATA ? 'Rest' : ''}</div>`}${done || '<div></div>'}</div>`;
+    }).join('');
+    const wkDone = d3.sum(DB.runs.filter((r) => r.date >= mon && r.flag !== 'walk'), (r) => r.dist_m);
+    const evs = events().filter((e) => e.date >= ymd(today)).slice(0, 3);
+    $('#bNext').innerHTML = `${fmtKm(wkDone)} km so far this week.${evs.length ? ' Coming up: ' + evs.map((e) => `${esc(e.title)} (${fmtDate(dOnly(e.date))})`).join(', ') + '.' : ''}`;
+  }
+}
+
+// ---------- heart rate ----------
+const ZONES = () => (HRD && HRD.zones) || [118, 147, 161, 176];
+function zoneLabels() { const z = ZONES(); return [`Z1 ≤${z[0]}`, `Z2 ${z[0] + 1}–${z[1]}`, `Z3 ${z[1] + 1}–${z[2]}`, `Z4 ${z[2] + 1}–${z[3]}`, `Z5 ${z[3] + 1}+`]; }
+function renderZones(runs) {
+  const rs = runs.filter((r) => r.hr).slice().sort((a, b) => a.date - b.date);
+  $('#zoneLeg').innerHTML = zoneLabels().map((l, i) => `<span><i style="background:var(--z${i + 1});border-radius:2px"></i>${l}</span>`).join('');
+  const node = $('#zones'); node.innerHTML = '';
+  if (!rs.length) { $('#zoneCap').textContent = 'No heart-rate data for runs in this period.'; return; }
+  const four = new Date(Date.now() - 28 * 864e5), base = dOnly(GOAL.baseStart);
+  const pct = (list) => { const z = [0, 1, 2, 3, 4].map((i) => d3.sum(list, (r) => r.hr.zs[i])), t = d3.sum(z); return t ? (z[0] + z[1]) / t * 100 : null; };
+  const recent = pct(rs.filter((r) => r.date >= four)), before = pct(rs.filter((r) => r.date < base)), since = pct(rs.filter((r) => r.date >= base));
+  $('#zoneCap').innerHTML = `Share of each run spent in each zone. Last 4 weeks: <b>${recent == null ? '–' : Math.round(recent) + '%'}</b> of run time in Z1–2.${before != null && since != null ? ` Before the base plan it was ${Math.round(before)}%; since 5 Oct it's ${Math.round(since)}%.` : ''}`;
+  const w = node.clientWidth || 600, h = 214, m = { t: 22, r: 8, b: 26, l: 40 };
+  const svg = d3.select(node).append('svg').attr('width', w).attr('height', h);
+  const x = d3.scaleBand().domain(rs.map((r) => r.id)).range([m.l, w - m.r]).paddingInner(0.2);
+  const y = d3.scaleLinear().domain([0, 1]).range([h - m.b, m.t]);
+  svg.append('g').attr('class', 'gridline').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickSize(-(w - m.l - m.r)).tickFormat(d3.format('.0%')));
+  svg.selectAll('.gridline text').attr('x', -6);
+  const every = Math.ceil(rs.length / (w / 70));
+  svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${h - m.b})`).call(d3.axisBottom(x).tickValues(x.domain().filter((_, i) => i % every === 0)).tickFormat((id) => d3.timeFormat('%-d %b')(rs.find((r) => r.id === id).date)).tickSize(0).tickPadding(8));
+  const bw = x.bandwidth();
+  for (const r of rs) {
+    const tot = d3.sum(r.hr.zs); let acc = 0;
+    r.hr.zs.forEach((sec, i) => {
+      if (!sec) return;
+      const y0 = y(acc / tot), y1 = y((acc + sec) / tot); acc += sec;
+      svg.append('rect').attr('x', x(r.id)).attr('width', bw).attr('y', y1 + 1).attr('height', Math.max(0, y0 - y1 - 2)).attr('fill', `var(--z${i + 1})`).attr('rx', Math.min(2, bw / 4));
+    });
+  }
+  svg.append('line').attr('x1', m.l).attr('x2', w - m.r).attr('y1', y(0.75)).attr('y2', y(0.75)).attr('stroke', 'var(--text-2)').attr('stroke-dasharray', '4 4').attr('stroke-width', 1);
+  if (base >= rs[0].date) { const bi = rs.findIndex((r) => r.date >= base); if (bi > 0) { const xx = x(rs[bi].id) - (x.step() - bw) / 2; svg.append('line').attr('x1', xx).attr('x2', xx).attr('y1', 4).attr('y2', h - m.b).attr('stroke', 'var(--text-2)').attr('stroke-width', 1.5); svg.append('text').attr('x', xx + 4).attr('y', 12).style('fill', 'var(--text-2)').text('Base plan starts'); } }
+  svg.append('g').selectAll('rect').data(rs).join('rect').attr('x', (r) => x(r.id) - (x.step() - bw) / 2).attr('width', x.step()).attr('y', m.t).attr('height', h - m.t - m.b).attr('fill', 'transparent')
+    .on('mousemove', (ev, r) => { const t = d3.sum(r.hr.zs); showTip(`<b>${esc(r.name)}</b><br>${fmtDate(r.date)} · ${fmtKm(r.dist_m)} km · avg ${r.hr.avg_hr} bpm<br>${zoneLabels().map((l, i) => `${l.split(' ')[0]} ${Math.round(r.hr.zs[i] / t * 100)}%`).join(' · ')}`, ev); })
+    .on('mouseleave', hideTip);
+  $('#zoneNote').textContent = `Dashed line marks 75% easy. Zones are Strava's age-based defaults. You've hit 185 bpm in a parkrun, so your real max is probably higher and these zones may sit a little low. Set your max heart rate in Strava (or match Runna's zones) and tell me, and I'll update them.`;
+}
+function renderEf(runs) {
+  const rs = runs.filter((r) => r.hr && r.paceOK).slice().sort((a, b) => a.date - b.date).map((r, i, arr) => ({ ...r, dt: r.date, ef: r.hr.ef, roll: d3.mean(arr.slice(Math.max(0, i - 4), i + 1), (x) => x.hr.ef) }));
+  const c = timeChart('#ef', rs, ['ef'], 220, (v) => v.toFixed(2));
+  if (!c) return;
+  const { svg, x, y } = c;
+  svg.append('g').selectAll('circle').data(rs).join('circle').attr('cx', (d) => x(d.dt)).attr('cy', (d) => y(d.ef)).attr('r', 4).attr('fill', 'var(--s1)').attr('fill-opacity', 0.6).attr('stroke', 'var(--surface)').attr('stroke-width', 1.5);
+  svg.append('path').datum(rs).attr('fill', 'none').attr('stroke', 'var(--s2)').attr('stroke-width', 2).attr('d', d3.line().x((d) => x(d.dt)).y((d) => y(d.roll)).curve(d3.curveMonotoneX));
+  hoverLayer(c, 'ef', (d) => `<b>${esc(d.name)}</b><br>${fmtDate(d.dt)} · ${fmtKm(d.dist_m)} km at ${fmtPace(d.pace)}/km<br>Avg HR ${d.hr.avg_hr} · efficiency ${d.ef.toFixed(2)}`);
+  const base = dOnly(GOAL.baseStart), pre = rs.filter((r) => r.dt < base), post = rs.filter((r) => r.dt >= base);
+  if (pre.length && post.length) { const a = d3.mean(pre, (r) => r.ef), b = d3.mean(post, (r) => r.ef); $('#efCap').innerHTML = `Metres per minute per heartbeat; higher means faster for the same effort. Since the base plan began, your average is <b>${b.toFixed(2)}</b> vs ${a.toFixed(2)} before, ${b >= a ? 'up' : 'down'} ${Math.abs((b - a) / a * 100).toFixed(0)}%.`; }
+}
+function renderDrift(runs) {
+  const rs = runs.filter((r) => r.hr && r.hr.drift != null && r.paceOK).slice().sort((a, b) => a.date - b.date);
+  const node = $('#drift'); node.innerHTML = '';
+  if (rs.length < 1) { node.innerHTML = '<p class="note">No runs of 40+ minutes with heart rate in this period.</p>'; return; }
+  const w = node.clientWidth || 400, h = 220, m = { t: 10, r: 8, b: 26, l: 40 };
+  const svg = d3.select(node).append('svg').attr('width', w).attr('height', h);
+  const x = d3.scaleBand().domain(rs.map((r) => r.id)).range([m.l, w - m.r]).paddingInner(0.3);
+  const lo = Math.min(0, d3.min(rs, (r) => r.hr.drift)), hi = Math.max(8, d3.max(rs, (r) => r.hr.drift));
+  const y = d3.scaleLinear().domain([lo, hi]).nice().range([h - m.b, m.t]);
+  svg.append('g').attr('class', 'gridline').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickSize(-(w - m.l - m.r)).tickFormat((v) => v + '%'));
+  svg.selectAll('.gridline text').attr('x', -6);
+  svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${h - m.b})`).call(d3.axisBottom(x).tickFormat((id) => d3.timeFormat('%-d %b')(rs.find((r) => r.id === id).date)).tickValues(x.domain().filter((_, i) => i % Math.ceil(rs.length / (w / 60)) === 0)).tickSize(0).tickPadding(8));
+  const bw = x.bandwidth();
+  svg.append('g').selectAll('rect').data(rs).join('rect').attr('x', (r) => x(r.id)).attr('width', bw)
+    .attr('y', (r) => y(Math.max(0, r.hr.drift))).attr('height', (r) => Math.abs(y(r.hr.drift) - y(0))).attr('rx', 3).attr('fill', 'var(--s1)');
+  svg.append('line').attr('x1', m.l).attr('x2', w - m.r).attr('y1', y(5)).attr('y2', y(5)).attr('stroke', 'var(--text-2)').attr('stroke-dasharray', '4 4');
+  svg.append('text').attr('x', w - m.r).attr('y', y(5) - 5).attr('text-anchor', 'end').style('fill', 'var(--text-2)').text('5%');
+  svg.append('g').selectAll('.hit').data(rs).join('rect').attr('x', (r) => x(r.id) - (x.step() - bw) / 2).attr('width', x.step()).attr('y', m.t).attr('height', h - m.t - m.b).attr('fill', 'transparent')
+    .on('mousemove', (ev, r) => showTip(`<b>${esc(r.name)}</b><br>${fmtDate(r.date)} · ${fmtKm(r.dist_m)} km at ${fmtPace(r.pace)}/km<br>Drift ${r.hr.drift}% · avg HR ${r.hr.avg_hr}`, ev)).on('mouseleave', hideTip);
+  const under = rs.filter((r) => r.hr.drift < 5).length;
+  $('#driftCap').innerHTML = `How much your heart rate creeps up for the same pace over runs of 40+ minutes. Under 5% means you're aerobically comfortable at that pace. <b>${under} of ${rs.length}</b> in this period were under 5%. Hilly routes and intervals push this up, so steady long runs are the ones to watch.`;
 }
 
 // ---------- controls ----------

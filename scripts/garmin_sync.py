@@ -130,7 +130,7 @@ def calendar(api, today):
             r = call(api.connectapi, f"/calendar-service/year/{y}/month/{m - 1}")  # Garmin months are 0-based
             for it in (r or {}).get("calendarItems", []) or []:
                 kind = it.get("itemType") or ""
-                if kind in ("activity", "weight", "steps", "sleep"):
+                if kind in ("activity", "weight", "steps", "sleep", "nap", "userTimeChanged", "goal"):
                     continue
                 items.append({
                     "date": it.get("date"),
