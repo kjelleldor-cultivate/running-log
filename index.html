@@ -1141,7 +1141,9 @@ function renderZones(runs) {
   svg.append('g').selectAll('rect').data(rs).join('rect').attr('x', (r) => x(r.id) - (x.step() - bw) / 2).attr('width', x.step()).attr('y', m.t).attr('height', h - m.t - m.b).attr('fill', 'transparent')
     .on('mousemove', (ev, r) => { const t = d3.sum(r.hr.zs); showTip(`<b>${esc(r.name)}</b><br>${fmtDate(r.date)} · ${fmtKm(r.dist_m)} km · avg ${r.hr.avg_hr} bpm<br>${zoneLabels().map((l, i) => `${l.split(' ')[0]} ${Math.round(r.hr.zs[i] / t * 100)}%`).join(' · ')}`, ev); })
     .on('mouseleave', hideTip);
-  $('#zoneNote').textContent = `Dashed line marks 75% easy. Zones are Strava's age-based defaults. You've hit 185 bpm in a parkrun, so your real max is probably higher and these zones may sit a little low. Set your max heart rate in Strava (or match Runna's zones) and tell me, and I'll update them.`;
+  $('#zoneNote').textContent = HRD && HRD.lthr
+    ? `Dashed line marks 75% easy. Zones are based on a lactate threshold heart rate of ${HRD.lthr} bpm (${HRD.zone_source.replace(/^Estimated LTHR \d+ /, 'estimated from your ').replace(/[()]/g, '')}): Z1–2 is easy running, Z3 steady, Z4 threshold, Z5 hard. A proper threshold test will firm this up.`
+    : `Dashed line marks 75% easy. Zones are Strava's age-based defaults.`;
 }
 function renderEf(runs) {
   const rs = runs.filter((r) => r.hr && r.paceOK).slice().sort((a, b) => a.date - b.date).map((r, i, arr) => ({ ...r, dt: r.date, ef: r.hr.ef, roll: d3.mean(arr.slice(Math.max(0, i - 4), i + 1), (x) => x.hr.ef) }));
