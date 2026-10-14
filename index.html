@@ -163,6 +163,12 @@ footer { margin-top: 24px; font-size: 12.5px; color: var(--muted); }
       <div class="sect"><h3>Recovery</h3><span id="wellSub">From Garmin</span></div>
       <div class="kpis" id="wkpis"></div>
       <div class="card span-12">
+        <h2>HRV over time</h2>
+        <p class="cap" id="hrvTrendCap">Your long-term direction, using all your Garmin history regardless of the filter above.</p>
+        <div class="legend"><span><i class="line" style="background:var(--s1)"></i>30-day average</span><span><i class="line" style="background:var(--muted)"></i>Trend</span></div>
+        <div id="hrvTrend"></div>
+      </div>
+      <div class="card span-12">
         <h2>Heart rate variability (overnight)</h2>
         <p class="cap">Higher is generally better. The shaded band is your personal baseline range from Garmin.</p>
         <div class="legend"><span><i style="background:var(--s1)"></i>Nightly average</span><span><i class="line" style="background:var(--s2)"></i>7-day average</span><span><i style="background:var(--s1-soft);border-radius:2px"></i>Baseline range</span><span><i style="background:var(--s3)"></i>Run that day (bigger = harder)</span></div>
@@ -210,6 +216,22 @@ footer { margin-top: 24px; font-size: 12.5px; color: var(--muted); }
       <h2>Best whole-run times</h2>
       <p class="cap">Fastest full run at each distance, all time. Strava's segment PBs inside longer runs may be quicker.</p>
       <div class="best" id="best"></div>
+    </div>
+
+    <div class="card span-7">
+      <h2>Fitness and fatigue</h2>
+      <p class="cap">Built from Strava relative effort, like Strava's Fitness &amp; Freshness. Fitness is a 42-day weighted average of effort, fatigue a 7-day one. Runs only.</p>
+      <div id="fitSum" style="font-size:13.5px;margin-bottom:8px"></div>
+      <div class="legend"><span><i class="line" style="background:var(--s1)"></i>Fitness</span><span><i class="line" style="background:var(--s2)"></i>Fatigue</span></div>
+      <div id="fit"></div>
+      <div class="legend" style="margin-top:6px"><span><i class="line" style="background:var(--s3)"></i>Form (fitness minus fatigue)</span></div>
+      <div id="form"></div>
+    </div>
+
+    <div class="card span-5">
+      <h2>Predicted race times</h2>
+      <p class="cap" id="predCap"></p>
+      <div id="pred"></div>
     </div>
 
     <div class="card span-8">
@@ -365,6 +387,8 @@ function render() {
   renderVolume(runs, all);
   renderPace(runs);
   renderBest(all);
+  renderFitness(all);
+  renderPredict(all);
   renderYears(all);
   renderShoes(all);
   renderLog();
@@ -399,6 +423,90 @@ function renderWell() {
   $('#wkpis').innerHTML = tiles.map(([l, val, u, d]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${val}${u ? `<small>${u}</small>` : ''}</div><div class="d">${d}</div></div>`).join('');
   renderHrv(rows); renderRhr(rows); renderSleep(rows);
   renderAfter(rows); renderLoad(rows);
+  renderHrvTrend(all);
+  renderPredict(DB.runs);
+}
+
+// ---------- HRV long-term trend ----------
+function renderHrvTrend(all) {
+  const d = all.filter((x) => x.hrv != null);
+  const out = d.map((x, i) => {
+    const win = d.filter((y) => y.dt > new Date(x.dt.getTime() - 30 * 864e5) && y.dt <= x.dt);
+    return { dt: x.dt, avg: win.length >= 7 ? d3.mean(win, (y) => y.hrv) : null };
+  }).filter((x) => x.avg != null);
+  const c = timeChart('#hrvTrend', out, ['avg'], 200, (v) => v + ' ms');
+  if (!c) { $('#hrvTrendCap').textContent = 'Needs a few more weeks of Garmin data.'; return; }
+  const { svg, x, y } = c;
+  // least-squares trend on the daily values
+  const t0 = d[0].dt.getTime(), xs = d.map((p) => (p.dt.getTime() - t0) / 864e5), ys = d.map((p) => p.hrv);
+  const mx = d3.mean(xs), my = d3.mean(ys);
+  const slope = d3.sum(xs, (v, i) => (v - mx) * (ys[i] - my)) / d3.sum(xs, (v) => (v - mx) ** 2);
+  const icpt = my - slope * mx, tEnd = xs[xs.length - 1];
+  svg.append('line').attr('x1', x(d[0].dt)).attr('x2', x(d[d.length - 1].dt)).attr('y1', y(icpt)).attr('y2', y(icpt + slope * tEnd))
+    .attr('stroke', 'var(--muted)').attr('stroke-width', 1.5).attr('stroke-dasharray', '5 4');
+  svg.append('path').datum(out).attr('fill', 'none').attr('stroke', 'var(--s1)').attr('stroke-width', 2.5).attr('stroke-linejoin', 'round').attr('d', d3.line().x((p) => x(p.dt)).y((p) => y(p.avg)).curve(d3.curveMonotoneX));
+  hoverLayer(c, 'avg', (p) => `<b>${fmtDate(p.dt)}</b><br>30-day average ${p.avg.toFixed(1)} ms`);
+  const first = out[0], last = out[out.length - 1], perMonth = slope * 30.4, diff = last.avg - first.avg;
+  const dir = Math.abs(perMonth) < 0.3 ? 'holding steady' : perMonth > 0 ? 'trending up' : 'trending down';
+  $('#hrvTrendCap').innerHTML = `30-day average went from <b>${first.avg.toFixed(1)} ms</b> (${fmtDate(first.dt)}) to <b>${last.avg.toFixed(1)} ms</b> now, ${diff >= 0 ? '+' : '−'}${Math.abs(diff).toFixed(1)} ms. Overall ${dir}${Math.abs(perMonth) >= 0.3 ? ` at about ${Math.abs(perMonth).toFixed(1)} ms a month` : ''}. Uses all your Garmin history.`;
+}
+
+// ---------- fitness & fatigue (from Strava effort) ----------
+function fitnessSeries(all) {
+  const byDay = new Map();
+  for (const r of all) { if (r.flag === 'walk' || !r.effort) continue; const k = r.start.slice(0, 10); byDay.set(k, (byDay.get(k) || 0) + r.effort); }
+  if (!all.length) return [];
+  const start = new Date(all[all.length - 1].date.getFullYear(), all[all.length - 1].date.getMonth(), all[all.length - 1].date.getDate());
+  const kF = 1 - Math.exp(-1 / 42), kA = 1 - Math.exp(-1 / 7);
+  let fit = 0, fat = 0; const out = [];
+  for (let d = new Date(start); d <= new Date(); d.setDate(d.getDate() + 1)) {
+    const e = byDay.get(ymd(d)) || 0;
+    fit += (e - fit) * kF; fat += (e - fat) * kA;
+    out.push({ dt: new Date(d), effort: e, fit: +fit.toFixed(1), fat: +fat.toFixed(1), form: +(fit - fat).toFixed(1) });
+  }
+  return out;
+}
+function renderFitness(all) {
+  const series = fitnessSeries(all), from = rangeStart(all);
+  const rows = series.filter((d) => RANGE === 'all' || d.dt >= from);
+  const now = series[series.length - 1], peak = rows.reduce((a, d) => (d.fit > a.fit ? d : a), rows[0]);
+  const formLabel = (f) => f < -25 ? 'heavy load, ease off soon' : f < -10 ? 'building fitness' : f <= 5 ? 'fresh and balanced' : 'very fresh, possibly losing fitness';
+  const ago = series[series.length - 29];
+  $('#fitSum').innerHTML = `Fitness <b>${now.fit.toFixed(0)}</b>${ago ? ` (${now.fit >= ago.fit ? '+' : '−'}${Math.abs(now.fit - ago.fit).toFixed(0)} in 4 weeks)` : ''} · fatigue <b>${now.fat.toFixed(0)}</b> · form <b>${now.form.toFixed(0)}</b>, ${formLabel(now.form)}. Peak in this period: ${peak.fit.toFixed(0)} on ${fmtDate(peak.dt)}.`;
+  const c = timeChart('#fit', rows, ['fit', 'fat'], 200);
+  if (c) {
+    const { svg, x, y } = c;
+    for (const [k, col] of [['fat', 'var(--s2)'], ['fit', 'var(--s1)']])
+      svg.append('path').datum(rows).attr('fill', 'none').attr('stroke', col).attr('stroke-width', 2).attr('d', d3.line().x((d) => x(d.dt)).y((d) => y(d[k])).curve(d3.curveMonotoneX));
+    hoverLayer(c, 'fit', (d) => `<b>${fmtDate(d.dt)}</b><br>Fitness ${d.fit} · fatigue ${d.fat}<br>Form ${d.form}${d.effort ? `<br>Ran: effort ${d.effort}` : ''}`);
+  }
+  const f = timeChart('#form', rows, ['form'], 120);
+  if (f) {
+    const { svg, x, y } = f;
+    if (y.domain()[0] < 0 && y.domain()[1] > 0) svg.append('line').attr('x1', x.range()[0]).attr('x2', x.range()[1]).attr('y1', y(0)).attr('y2', y(0)).attr('stroke', 'var(--muted)');
+    svg.append('path').datum(rows).attr('fill', 'none').attr('stroke', 'var(--s3)').attr('stroke-width', 2).attr('d', d3.line().x((d) => x(d.dt)).y((d) => y(d.form)).curve(d3.curveMonotoneX));
+    hoverLayer(f, 'form', (d) => `<b>${fmtDate(d.dt)}</b><br>Form ${d.form}: ${formLabel(d.form)}`);
+  }
+}
+
+// ---------- predicted race times ----------
+function renderPredict(all) {
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 120);
+  const recent = all.filter((r) => r.paceOK && r.dist_m >= 3000 && r.date >= cutoff);
+  const eq = (r, D) => r.moving_s * Math.pow(D / r.dist_m, 1.06);
+  const targets = [['5 km', 5000, '5k'], ['10 km', 10000, '10k'], ['Half marathon', 21097.5, 'half'], ['Marathon', 42195, 'marathon']];
+  if (!recent.length) { $('#predCap').textContent = 'Needs an outdoor run of 3 km or more in the last four months.'; $('#pred').innerHTML = ''; return; }
+  const basis = recent.reduce((a, r) => (eq(r, 10000) < eq(a, 10000) ? r : a));
+  const ok = all.filter((r) => r.paceOK);
+  const gr = GDATA && GDATA.race;
+  $('#predCap').innerHTML = `Based on your strongest run of the last four months: <b>${esc(basis.name)}</b>, ${fmtKm(basis.dist_m)} km at ${fmtPace(basis.pace)}/km on ${fmtDate(basis.date)}. Uses Riegel's formula.${gr ? ` Garmin's column comes from your watch (${fmtDate(new Date(gr.date + 'T00:00:00'))}).` : GENV ? ' Unlock above to see Garmin\'s predictions too.' : ''}`;
+  $('#pred').innerHTML = `<table><thead><tr><th>Distance</th><th class="r">Predicted</th><th class="r">Pace</th>${gr ? '<th class="r">Garmin</th>' : ''}<th class="r">Your best</th></tr></thead><tbody>` +
+    targets.map(([label, D, key]) => {
+      const t = eq(basis, D);
+      const lo = D * 0.96, hi = D * 1.03, best = ok.filter((r) => r.dist_m >= lo && r.dist_m <= hi).reduce((a, r) => (!a || r.pace < a.pace ? r : a), null);
+      const bt = best ? best.pace * D / 1000 : null;
+      return `<tr><td>${label}</td><td class="r"><b>${fmtClock(t)}</b></td><td class="r">${fmtPace(t / (D / 1000))}/km</td>${gr ? `<td class="r">${gr[key] ? fmtClock(gr[key]) : '–'}</td>` : ''}<td class="r">${bt ? fmtClock(bt) : '–'}</td></tr>`;
+    }).join('') + `</tbody></table><p class="note" style="margin-top:8px">Longer predictions assume you've done the long runs to match. From a 5–10 km effort, treat the marathon figure as a best case.</p>`;
 }
 
 // ---------- linking Strava and Garmin ----------

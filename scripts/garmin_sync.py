@@ -135,7 +135,19 @@ def main():
     out = {
         "updated": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "days": sorted(by_date.values(), key=lambda r: r["date"]),
+        "race_hist": existing.get("race_hist", {}),
     }
+    # Garmin's race predictor (seconds). Kept as a daily history so trends build up.
+    rp = call(api.get_race_predictions)
+    if isinstance(rp, list):
+        rp = rp[-1] if rp else None
+    if isinstance(rp, dict):
+        race = {k: rp.get(src) for k, src in [("5k", "time5K"), ("10k", "time10K"), ("half", "timeHalfMarathon"), ("marathon", "timeMarathon")]}
+        if any(race.values()):
+            out["race_hist"][today.isoformat()] = race
+            out["race"] = {"date": today.isoformat(), **race}
+    if "race" not in out and existing.get("race"):
+        out["race"] = existing["race"]
     OUT.write_text(json.dumps(encrypt(out, pw)))
     print(f"{len(out['days'])} days saved")
 
