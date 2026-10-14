@@ -22,6 +22,7 @@ import time
 import base64
 
 from cryptography.hazmat.primitives import hashes
+from garminconnect import Garmin
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
