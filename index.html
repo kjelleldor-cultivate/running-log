@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kjell's Running Log</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏃</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f3ef; --surface: #fcfcfb; --border: #e3e1da;
+  --text: #0b0b0b; --text-2: #52514e; --muted: #85837c;
+  --s1: #2a78d6; --s1-soft: #86b6ef; --s2: #eb6834; --s3: #1baf7a;
+  --grid: #ecebe5; --accent: #fc4c02;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --surface: #1a1a19; --border: #2c2b29;
+    --text: #f0efec; --text-2: #c3c2b7; --muted: #8e8d86;
+    --s1: #3987e5; --s1-soft: #1c5cab; --s2: #d95926; --s3: #199e70;
+    --grid: #262624;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --surface: #1a1a19; --border: #2c2b29;
+  --text: #f0efec; --text-2: #c3c2b7; --muted: #8e8d86;
+  --s1: #3987e5; --s1-soft: #1c5cab; --s2: #d95926; --s3: #199e70;
+  --grid: #262624;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 Inter, system-ui, sans-serif; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 28px 16px 60px; }
+header { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; justify-content: space-between; margin-bottom: 20px; }
+h1 { font-size: 28px; line-height: 1.15; margin: 0; letter-spacing: -0.02em; display: flex; align-items: center; gap: 12px; }
+h1 .runner { display: inline-block; animation: bob .6s ease-in-out infinite alternate; }
+@keyframes bob { from { transform: translateY(0) } to { transform: translateY(-4px) } }
+@media (prefers-reduced-motion: reduce) { h1 .runner { animation: none; } }
+.sub { color: var(--text-2); font-size: 14px; margin-top: 4px; }
+.sub a { color: var(--text-2); }
+.actions { display: flex; gap: 8px; align-items: center; }
+button, .seg button { font: inherit; cursor: pointer; }
+.btn { background: var(--text); color: var(--surface); border: 0; border-radius: 8px; padding: 9px 14px; font-weight: 600; font-size: 14px; display: inline-flex; gap: 8px; align-items: center; }
+.btn:disabled { opacity: .6; cursor: wait; }
+.btn svg { width: 16px; height: 16px; }
+.btn.spin svg { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg) } }
+.toast { font-size: 13px; color: var(--text-2); min-height: 18px; }
+.filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 4px 0 18px; }
+.seg { display: inline-flex; background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 3px; }
+.seg button { border: 0; background: transparent; color: var(--text-2); padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: 500; }
+.seg button[aria-pressed="true"] { background: var(--text); color: var(--surface); }
+.note { font-size: 12.5px; color: var(--muted); }
+.grid { display: grid; gap: 14px; grid-template-columns: repeat(12, 1fr); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; min-width: 0; }
+.card h2 { font-size: 14px; font-weight: 600; margin: 0 0 2px; }
+.card .cap { font-size: 12.5px; color: var(--muted); margin: 0 0 12px; }
+.kpis { grid-column: span 12; display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
+.kpi .l { font-size: 12.5px; color: var(--text-2); }
+.kpi .v { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.kpi .v small { font-size: 14px; font-weight: 500; color: var(--text-2); margin-left: 2px; }
+.kpi .d { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.span-12 { grid-column: span 12; } .span-8 { grid-column: span 8; } .span-7 { grid-column: span 7; }
+.span-6 { grid-column: span 6; } .span-5 { grid-column: span 5; } .span-4 { grid-column: span 4; }
+@media (max-width: 900px) {
+  .kpis { grid-template-columns: repeat(3, 1fr); }
+  .span-8, .span-7, .span-6, .span-5, .span-4 { grid-column: span 12; }
+}
+td.r { white-space: nowrap; }
+@media (max-width: 520px) { #years th:nth-child(4), #years td:nth-child(4) { display: none; } }
+@media (max-width: 520px) { .kpis { grid-template-columns: repeat(2, 1fr); } h1 { font-size: 23px; } }
+svg text { fill: var(--muted); font-size: 11px; font-family: Inter, system-ui, sans-serif; }
+.axis path, .axis line { stroke: var(--border); }
+.gridline line { stroke: var(--grid); }
+.gridline path { display: none; }
+.legend { display: flex; gap: 16px; font-size: 12.5px; color: var(--text-2); margin-bottom: 8px; flex-wrap: wrap; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.legend i.line { width: 16px; height: 2px; border-radius: 1px; vertical-align: 3px; }
+#tip { position: fixed; pointer-events: none; background: var(--text); color: var(--surface); font-size: 12.5px; line-height: 1.45; padding: 8px 10px; border-radius: 8px; max-width: 260px; opacity: 0; transition: opacity .1s; z-index: 10; }
+#tip b { font-weight: 600; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-weight: 500; color: var(--text-2); font-size: 12.5px; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 7px 8px; border-bottom: 1px solid var(--grid); }
+td.r, th.r { text-align: right; }
+td a { color: var(--text); text-decoration: none; }
+td a:hover { text-decoration: underline; }
+.tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 5px; border: 1px solid var(--border); color: var(--muted); margin-left: 6px; }
+.tag.pr { color: var(--text-2); }
+.best { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.best > div { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.best .l { font-size: 12px; color: var(--text-2); }
+.best .v { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.best .d { font-size: 12px; color: var(--muted); }
+.shoe { margin-bottom: 14px; }
+.shoe .top { display: flex; justify-content: space-between; font-size: 13.5px; }
+.shoe .bar { height: 8px; background: var(--grid); border-radius: 4px; margin-top: 6px; overflow: hidden; }
+.shoe .bar span { display: block; height: 100%; background: var(--s1); border-radius: 4px; }
+.search { font: inherit; font-size: 13.5px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); width: 220px; max-width: 100%; }
+.tablewrap { overflow-x: auto; max-height: 460px; overflow-y: auto; }
+.tablewrap th { position: sticky; top: 0; background: var(--surface); }
+.err { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.theme { display:inline-flex; align-items:center; background: var(--surface); color: var(--text-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 14px; }
+footer { margin-top: 24px; font-size: 12.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1><span class="runner" aria-hidden="true">🏃‍♂️</span>Kjell Eldor's Running Log</h1>
+      <div class="sub" id="sub">Loading…</div>
+    </div>
+    <div class="actions">
+      <span class="toast" id="toast" role="status"></span>
+      <button class="theme" id="theme" title="Toggle light/dark" aria-label="Toggle light or dark theme"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg></button>
+      <button class="btn" id="refresh">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+        Refresh
+      </button>
+    </div>
+  </header>
+
+  <div class="filters">
+    <div class="seg" id="range" role="group" aria-label="Time range">
+      <button data-r="90">90 days</button>
+      <button data-r="365" aria-pressed="true">12 months</button>
+      <button data-r="ytd">This year</button>
+      <button data-r="all">All time</button>
+    </div>
+    <span class="note">Pace stats leave out treadmill runs (no GPS) and runs the watch got wrong.</span>
+  </div>
+
+  <div class="grid" id="app">
+    <div class="kpis" id="kpis"></div>
+
+    <div class="card span-12">
+      <h2 id="volTitle">Weekly distance</h2>
+      <p class="cap" id="volCap"></p>
+      <div id="vol"></div>
+    </div>
+
+    <div class="card span-7">
+      <h2>Pace over time</h2>
+      <p class="cap">Average moving pace per outdoor run. Higher on the chart is faster.</p>
+      <div class="legend"><span><i style="background:var(--s1)"></i>Each run</span><span><i class="line" style="background:var(--s2)"></i>Rolling average (last 5 runs)</span></div>
+      <div id="pace"></div>
+    </div>
+
+    <div class="card span-5">
+      <h2>Best whole-run times</h2>
+      <p class="cap">Fastest full run at each distance, all time. Strava's segment PBs inside longer runs may be quicker.</p>
+      <div class="best" id="best"></div>
+    </div>
+
+    <div class="card span-8">
+      <h2>Year by year</h2>
+      <p class="cap">All runs, including treadmill. Pace is outdoor only.</p>
+      <div class="tablewrap" style="max-height:none"><table id="years"></table></div>
+    </div>
+
+    <div class="card span-4">
+      <h2>Shoes</h2>
+      <p class="cap">Distance logged per pair. Most running shoes are good for 500 to 800 km.</p>
+      <div id="shoes"></div>
+    </div>
+
+    <div class="card span-12">
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline">
+        <div><h2>All runs</h2><p class="cap" id="logCap"></p></div>
+        <input class="search" id="q" type="search" placeholder="Search runs…" aria-label="Search runs">
+      </div>
+      <div class="tablewrap"><table id="log"></table></div>
+    </div>
+  </div>
+
+  <footer>Data from <a id="stravaLink" href="https://www.strava.com/athletes/10252695" style="color:inherit">Strava</a>. Refresh re-reads the latest saved data; new runs are pulled from Strava once a day.</footer>
+</div>
+<div id="tip"></div>
+
+<script>
+const DATA_URL = 'data/runs.json';
+let DB = null, RANGE = '365';
+
+// ---------- helpers ----------
+const $ = (s) => document.querySelector(s);
+const fmtPace = (s) => { if (!isFinite(s)) return '–'; const m = Math.floor(s / 60), x = Math.round(s % 60); return x === 60 ? `${m + 1}:00` : `${m}:${String(x).padStart(2, '0')}`; };
+const fmtDur = (s) => { const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60); return h ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`; };
+const fmtClock = (s) => { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = Math.round(s % 60); return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
+const fmtKm = (m, d = 1) => (m / 1000).toLocaleString('en-GB', { minimumFractionDigits: d, maximumFractionDigits: d });
+const fmtDate = (d) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const parseLocal = (s) => { const [d, t] = s.split('T'); const [y, mo, da] = d.split('-').map(Number); const [h, mi, se] = t.split(':').map(Number); return new Date(y, mo - 1, da, h, mi, se); };
+const weekStart = (d) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); const wd = (x.getDay() + 6) % 7; x.setDate(x.getDate() - wd); return x; };
+
+const tip = $('#tip');
+function showTip(html, ev) {
+  tip.innerHTML = html; tip.style.opacity = 1;
+  const r = tip.getBoundingClientRect();
+  let x = ev.clientX + 14, y = ev.clientY + 14;
+  if (x + r.width > innerWidth - 8) x = ev.clientX - r.width - 14;
+  if (y + r.height > innerHeight - 8) y = ev.clientY - r.height - 14;
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+}
+const hideTip = () => { tip.style.opacity = 0; };
+
+// ---------- data ----------
+function normalise(raw) {
+  const c = raw.cols, ix = Object.fromEntries(c.map((k, i) => [k, i]));
+  const runs = raw.runs.map((r) => {
+    const o = {}; for (const k of c) o[k] = r[ix[k]];
+    o.date = parseLocal(o.start);
+    o.indoor = !o.loc;
+    o.pace = o.moving_s / (o.dist_m / 1000);
+    o.paceOK = !o.indoor && !o.flag && o.dist_m >= 1500;
+    return o;
+  }).filter((r) => r.flag !== 'dup').sort((a, b) => b.date - a.date);
+  return { ...raw, runs };
+}
+
+async function load(manual) {
+  const btn = $('#refresh');
+  btn.disabled = true; btn.classList.add('spin');
+  try {
+    const res = await fetch(DATA_URL + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const before = DB ? DB.runs.length : null;
+    DB = normalise(await res.json());
+    render();
+    if (manual) {
+      const diff = before == null ? 0 : DB.runs.length - before;
+      $('#toast').textContent = diff > 0 ? `${diff} new run${diff > 1 ? 's' : ''} loaded` : 'Up to date';
+      setTimeout(() => ($('#toast').textContent = ''), 4000);
+    }
+  } catch (e) {
+    $('#toast').textContent = "Couldn't load data (" + e.message + ')';
+  } finally {
+    btn.disabled = false; btn.classList.remove('spin');
+  }
+}
+
+function inRange(runs) {
+  const now = new Date();
+  if (RANGE === 'all') return runs;
+  let from;
+  if (RANGE === 'ytd') from = new Date(now.getFullYear(), 0, 1);
+  else { from = new Date(now); from.setDate(from.getDate() - Number(RANGE)); }
+  return runs.filter((r) => r.date >= from);
+}
+function rangeStart(runs) {
+  const now = new Date();
+  if (RANGE === 'ytd') return new Date(now.getFullYear(), 0, 1);
+  if (RANGE === 'all') return runs.length ? runs[runs.length - 1].date : now;
+  const f = new Date(now); f.setDate(f.getDate() - Number(RANGE)); return f;
+}
+const rangeLabel = () => ({ '90': 'last 90 days', '365': 'last 12 months', ytd: 'this year', all: 'all time' }[RANGE]);
+
+// ---------- render ----------
+function render() {
+  const all = DB.runs, runs = inRange(all);
+  const upd = new Date(DB.updated);
+  $('#sub').innerHTML = `${all.length} runs since ${fmtDate(all[all.length - 1].date)} · data updated ${upd.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · <a href="${DB.athlete.strava}" target="_blank" rel="noopener">Strava profile</a>`;
+  renderKpis(runs, all);
+  renderVolume(runs, all);
+  renderPace(runs);
+  renderBest(all);
+  renderYears(all);
+  renderShoes(all);
+  renderLog();
+}
+
+function stats(runs) {
+  const dist = d3.sum(runs, (r) => r.dist_m), time = d3.sum(runs, (r) => r.moving_s);
+  const ok = runs.filter((r) => r.paceOK);
+  const pace = d3.sum(ok, (r) => r.moving_s) / (d3.sum(ok, (r) => r.dist_m) / 1000);
+  return { n: runs.length, dist, time, elev: d3.sum(runs, (r) => r.elev_m || 0), pace, longest: d3.max(runs, (r) => r.dist_m) || 0 };
+}
+
+function renderKpis(runs, all) {
+  const s = stats(runs);
+  // previous equal-length period for comparison (not for ytd/all)
+  let cmp = '';
+  if (RANGE === '90' || RANGE === '365') {
+    const days = Number(RANGE), end = new Date(); end.setDate(end.getDate() - days);
+    const start = new Date(end); start.setDate(start.getDate() - days);
+    const prev = stats(all.filter((r) => r.date >= start && r.date < end));
+    cmp = prev.dist ? `${s.dist >= prev.dist ? '+' : '−'}${fmtKm(Math.abs(s.dist - prev.dist), 0)} km vs previous ${days === 90 ? '90 days' : '12 months'}` : '';
+  }
+  const last = all[0];
+  const daysSince = Math.floor((Date.now() - last.date) / 864e5);
+  const weeks = Math.max(1, (Date.now() - rangeStart(all)) / (7 * 864e5));
+  const tiles = [
+    ['Distance', fmtKm(s.dist, 0), 'km', cmp || rangeLabel()],
+    ['Runs', s.n, '', `${(s.n / weeks).toFixed(1)} per week`],
+    ['Time on feet', fmtDur(s.time), '', `${fmtKm(s.elev * 1000, 0)} m climbed`],
+    ['Average pace', fmtPace(s.pace), '/km', 'outdoor runs'],
+    ['Longest run', fmtKm(s.longest), 'km', rangeLabel()],
+    ['Last run', daysSince === 0 ? 'Today' : daysSince === 1 ? 'Yesterday' : daysSince + ' days', '', `${fmtKm(last.dist_m)} km at ${fmtPace(last.pace)}/km`],
+  ];
+  $('#kpis').innerHTML = tiles.map(([l, v, u, d]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}${u ? `<small>${u}</small>` : ''}</div><div class="d">${d}</div></div>`).join('');
+}
+
+function chartBox(el, h) {
+  const node = $(el); node.innerHTML = '';
+  const w = node.clientWidth || 600;
+  const svg = d3.select(node).append('svg').attr('width', w).attr('height', h).attr('viewBox', `0 0 ${w} ${h}`);
+  return { svg, w, h };
+}
+
+function renderVolume(runs, all) {
+  const monthly = RANGE === 'all';
+  const start = rangeStart(all);
+  const bucket = monthly ? (d) => new Date(d.getFullYear(), d.getMonth(), 1) : weekStart;
+  const step = monthly ? d3.timeMonth : d3.timeWeek.every(1);
+  const first = bucket(start), last = bucket(new Date());
+  const keys = monthly ? d3.timeMonths(first, d3.timeMonth.offset(last, 1)) : d3.timeMondays(d3.timeDay.offset(first, -1), d3.timeDay.offset(last, 1));
+  const map = new Map(keys.map((k) => [+k, { k, dist: 0, n: 0, time: 0 }]));
+  for (const r of runs) { const b = map.get(+bucket(r.date)); if (b) { b.dist += r.dist_m; b.n++; b.time += r.moving_s; } }
+  const data = [...map.values()];
+  $('#volTitle').textContent = monthly ? 'Monthly distance' : 'Weekly distance';
+  const active = data.filter((d) => d.n);
+  $('#volCap').textContent = `${active.length} of ${data.length} ${monthly ? 'months' : 'weeks'} with a run · average ${fmtKm(d3.mean(active, (d) => d.dist) || 0)} km in those ${monthly ? 'months' : 'weeks'}`;
+
+  const { svg, w, h } = chartBox('#vol', 220);
+  const m = { t: 10, r: 8, b: 26, l: 46 };
+  const x = d3.scaleBand().domain(data.map((d) => +d.k)).range([m.l, w - m.r]).paddingInner(data.length > 60 ? 0.15 : 0.25);
+  const y = d3.scaleLinear().domain([0, Math.max(10, d3.max(data, (d) => d.dist / 1000))]).nice().range([h - m.b, m.t]);
+  svg.append('g').attr('class', 'gridline').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickSize(-(w - m.l - m.r)).tickFormat((v) => v + ' km'));
+  svg.selectAll('.gridline text').attr('x', -6);
+  const tickEvery = Math.ceil(data.length / (w / 70));
+  const fmt = monthly ? d3.timeFormat("%b '%y") : d3.timeFormat('%-d %b');
+  svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${h - m.b})`)
+    .call(d3.axisBottom(x).tickValues(x.domain().filter((_, i) => i % tickEvery === 0)).tickFormat((v) => fmt(new Date(v))).tickSize(0).tickPadding(8));
+  const bw = x.bandwidth(), rad = Math.min(4, bw / 2);
+  svg.append('g').selectAll('path').data(data.filter((d) => d.dist > 0)).join('path')
+    .attr('fill', 'var(--s1)')
+    .attr('d', (d) => { const x0 = x(+d.k), y0 = y(d.dist / 1000), y1 = y(0), rr = Math.min(rad, y1 - y0); return `M${x0},${y1}V${y0 + rr}Q${x0},${y0} ${x0 + rr},${y0}H${x0 + bw - rr}Q${x0 + bw},${y0} ${x0 + bw},${y0 + rr}V${y1}Z`; });
+  // hit targets
+  svg.append('g').selectAll('rect').data(data).join('rect')
+    .attr('x', (d) => x(+d.k) - (x.step() - bw) / 2).attr('width', x.step()).attr('y', m.t).attr('height', h - m.t - m.b).attr('fill', 'transparent')
+    .on('mousemove', (ev, d) => showTip(`<b>${monthly ? d3.timeFormat('%B %Y')(d.k) : 'Week of ' + fmtDate(d.k)}</b><br>${d.n ? `${fmtKm(d.dist)} km · ${d.n} run${d.n > 1 ? 's' : ''}<br>${fmtDur(d.time)}` : 'No runs'}`, ev))
+    .on('mouseleave', hideTip);
+}
+
+function renderPace(runs) {
+  const pts = runs.filter((r) => r.paceOK).slice().sort((a, b) => a.date - b.date);
+  const { svg, w, h } = chartBox('#pace', 260);
+  if (pts.length < 2) { svg.append('text').attr('x', w / 2).attr('y', h / 2).attr('text-anchor', 'middle').text('Not enough outdoor runs in this period'); return; }
+  const m = { t: 10, r: 24, b: 26, l: 44 };
+  const x = d3.scaleTime().domain(d3.extent(pts, (d) => d.date)).range([m.l, w - m.r]);
+  const ext = d3.extent(pts, (d) => d.pace);
+  const y = d3.scaleLinear().domain([ext[1] + 10, ext[0] - 10]).range([h - m.b, m.t]);
+  svg.append('g').attr('class', 'gridline').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).tickValues((() => { const [a, b] = [y.domain()[1], y.domain()[0]]; const st = (b - a) > 150 ? 30 : 15; const v = []; for (let t = Math.ceil(a / st) * st; t <= b; t += st) v.push(t); return v; })()).tickSize(-(w - m.l - m.r)).tickFormat(fmtPace));
+  svg.selectAll('.gridline text').attr('x', -6);
+  svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${h - m.b})`).call(d3.axisBottom(x).ticks(Math.max(2, Math.floor(w / 90))).tickSize(0).tickPadding(8));
+  const roll = pts.map((p, i) => { const s = pts.slice(Math.max(0, i - 4), i + 1); return { date: p.date, pace: d3.sum(s, (d) => d.moving_s) / (d3.sum(s, (d) => d.dist_m) / 1000) }; });
+  const rMax = d3.max(pts, (d) => d.dist_m);
+  const rs = d3.scaleSqrt().domain([0, rMax]).range([0, 9]);
+  svg.append('g').selectAll('circle').data(pts).join('circle')
+    .attr('cx', (d) => x(d.date)).attr('cy', (d) => y(d.pace)).attr('r', (d) => Math.max(4, rs(d.dist_m)))
+    .attr('fill', 'var(--s1)').attr('fill-opacity', 0.55).attr('stroke', 'var(--surface)').attr('stroke-width', 1.5);
+  svg.append('path').datum(roll).attr('fill', 'none').attr('stroke', 'var(--s2)').attr('stroke-width', 2).attr('stroke-linejoin', 'round')
+    .attr('d', d3.line().x((d) => x(d.date)).y((d) => y(d.pace)).curve(d3.curveMonotoneX));
+  const hl = svg.append('circle').attr('r', 7).attr('fill', 'none').attr('stroke', 'var(--text)').attr('stroke-width', 2).style('opacity', 0);
+  const delaunay = d3.Delaunay.from(pts, (d) => x(d.date), (d) => y(d.pace));
+  svg.append('rect').attr('x', m.l).attr('y', m.t).attr('width', w - m.l - m.r).attr('height', h - m.t - m.b).attr('fill', 'transparent')
+    .on('mousemove', (ev) => {
+      const [mx, my] = d3.pointer(ev); const i = delaunay.find(mx, my); const d = pts[i];
+      hl.attr('cx', x(d.date)).attr('cy', y(d.pace)).style('opacity', 1);
+      showTip(`<b>${esc(d.name)}</b><br>${fmtDate(d.date)}<br>${fmtKm(d.dist_m)} km · ${fmtPace(d.pace)}/km<br>5-run average: ${fmtPace(roll[i].pace)}/km`, ev);
+    })
+    .on('mouseleave', () => { hl.style('opacity', 0); hideTip(); });
+}
+
+function renderBest(all) {
+  const ok = all.filter((r) => r.paceOK);
+  const bands = [['5 km', 4800, 5400, 5000], ['10 km', 9900, 10600, 10000], ['Half marathon', 21000, 21500, 21097.5], ['Marathon', 42000, 43200, 42195]];
+  $('#best').innerHTML = bands.map(([label, lo, hi, std]) => {
+    const c = ok.filter((r) => r.dist_m >= lo && r.dist_m <= hi);
+    if (!c.length) return `<div><div class="l">${label}</div><div class="v">–</div><div class="d">No run yet</div></div>`;
+    const b = c.reduce((a, r) => (r.pace < a.pace ? r : a));
+    return `<div><div class="l">${label}</div><div class="v">${fmtClock(b.pace * std / 1000)}</div><div class="d">${fmtPace(b.pace)}/km · ${fmtDate(b.date)}<br>${esc(b.name)} · ${c.length} run${c.length > 1 ? 's' : ''} at this distance</div></div>`;
+  }).join('');
+}
+
+function renderYears(all) {
+  const ys = d3.groups(all, (r) => r.date.getFullYear()).sort((a, b) => b[0] - a[0]);
+  const max = d3.max(ys, ([, rs]) => d3.sum(rs, (r) => r.dist_m));
+  $('#years').innerHTML = `<thead><tr><th>Year</th><th class="r">Runs</th><th class="r">Distance</th><th style="width:30%"></th><th class="r">Avg pace</th><th class="r">Longest</th></tr></thead><tbody>` +
+    ys.map(([y, rs]) => { const s = stats(rs); return `<tr><td>${y}</td><td class="r">${s.n}</td><td class="r">${fmtKm(s.dist, 0)} km</td><td><div class="shoe" style="margin:0"><div class="bar" style="margin:0"><span style="width:${(s.dist / max) * 100}%"></span></div></div></td><td class="r">${fmtPace(s.pace)}/km</td><td class="r">${fmtKm(s.longest)} km</td></tr>`; }).join('') + '</tbody>';
+}
+
+function renderShoes(all) {
+  const rows = Object.entries(DB.gear).map(([id, g]) => {
+    const rs = all.filter((r) => r.gear === id);
+    return { ...g, dist: d3.sum(rs, (r) => r.dist_m), n: rs.length, first: rs.length ? rs[rs.length - 1].date : null };
+  }).sort((a, b) => (a.retired - b.retired) || b.dist - a.dist);
+  $('#shoes').innerHTML = rows.map((s) => `<div class="shoe"><div class="top"><span>${esc(s.name)}${s.retired ? '<span class="tag">retired</span>' : ''}</span><b>${fmtKm(s.dist, 0)} km</b></div><div class="bar"><span style="width:${Math.min(100, (s.dist / 800000) * 100)}%"></span></div><div class="note" style="margin-top:4px">${s.n} runs${s.first ? ' since ' + fmtDate(s.first) : ''}</div></div>`).join('') +
+    `<p class="note">Bar scale is 800 km. Runs from before you linked shoes on Strava aren't counted.</p>`;
+}
+
+function renderLog() {
+  const q = $('#q').value.trim().toLowerCase();
+  const rs = inRange(DB.runs).filter((r) => !q || (r.name + ' ' + r.loc).toLowerCase().includes(q));
+  $('#logCap').textContent = `${rs.length} runs, ${rangeLabel()}${q ? ` matching "${q}"` : ''}`;
+  $('#log').innerHTML = `<thead><tr><th>Date</th><th>Run</th><th class="r">Distance</th><th class="r">Time</th><th class="r">Pace</th><th class="r">Climb</th><th class="r">Effort</th><th class="r">Cadence</th></tr></thead><tbody>` +
+    rs.map((r) => `<tr><td style="white-space:nowrap">${fmtDate(r.date)}</td><td><a href="https://www.strava.com/activities/${r.id}" target="_blank" rel="noopener">${esc(r.name)}</a>${r.indoor ? '<span class="tag">treadmill</span>' : ''}${r.flag === 'walk' ? '<span class="tag">walk</span>' : ''}${r.flag === 'gps' ? '<span class="tag">GPS glitch</span>' : ''}${r.prs ? `<span class="tag pr">${r.prs} PR${r.prs > 1 ? 's' : ''}</span>` : ''}<div class="note">${esc(r.loc || 'Indoors')}</div></td><td class="r">${fmtKm(r.dist_m, 2)} km</td><td class="r">${fmtClock(r.moving_s)}</td><td class="r">${r.paceOK ? fmtPace(r.pace) + '/km' : '–'}</td><td class="r">${Math.round(r.elev_m || 0)} m</td><td class="r">${r.effort ?? '–'}</td><td class="r">${r.cadence ? Math.round(r.cadence * 2) + ' spm' : '–'}</td></tr>`).join('') + '</tbody>';
+}
+
+// ---------- controls ----------
+document.querySelectorAll('#range button').forEach((b) => b.addEventListener('click', () => {
+  document.querySelectorAll('#range button').forEach((x) => x.setAttribute('aria-pressed', x === b));
+  RANGE = b.dataset.r; render();
+}));
+$('#refresh').addEventListener('click', () => load(true));
+$('#q').addEventListener('input', renderLog);
+$('#theme').addEventListener('click', () => {
+  const root = document.documentElement;
+  const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  root.dataset.theme = dark ? 'light' : 'dark';
+  try { localStorage.setItem('theme', root.dataset.theme); } catch (e) {}
+});
+try { const t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => DB && render(), 150); });
+load(false);
+</script>
+</body>
+</html>
