@@ -139,5 +139,29 @@ def main():
     print(f"{len(out['days'])} days saved")
 
 
+def fail(msg):
+    # "::error::" makes GitHub show the reason in the run's Annotations box
+    print(f"::error::{msg}")
+    sys.exit(1)
+
+
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit as e:
+        if isinstance(e.code, str):
+            fail(e.code)
+        raise
+    except Exception as e:
+        txt = f"{type(e).__name__}: {e}"
+        hint = ""
+        low = txt.lower()
+        if "401" in txt or "unauthor" in low or "credential" in low or "password" in low:
+            hint = " (Garmin rejected the login: check GARMIN_EMAIL and GARMIN_PASSWORD, or use GARMINTOKENS if you have two-step verification.)"
+        elif "429" in txt or "too many" in low:
+            hint = " (Garmin is rate-limiting. Wait an hour and run it again.)"
+        elif "mfa" in low or "verification" in low:
+            hint = " (Two-step verification is on: create a GARMINTOKENS secret with scripts/garmin_token.py.)"
+        elif "InvalidTag" in txt:
+            hint = " (DASHBOARD_PASSWORD doesn't match the one used to encrypt data/garmin.enc.json.)"
+        fail(txt[:400] + hint)
